@@ -13,7 +13,7 @@
 	<version>0.0.1-SNAPSHOT</version>
 	<packaging>pom</packaging>
 	<name>TechNotify</name>
-	<description>Demo project for Spring Boot</description>
+	<description>TechNotify is a web application developed using Spring Boot</description>
 	<url/>
 	<licenses>
 		<license/>
