@@ -4,12 +4,14 @@ import com.kovan.dto.TestDto;
 import com.kovan.entity.TestEntity;
 import org.springframework.stereotype.Component;
 
+import java.util.Objects;
+
 @Component
 public class TestMapper {
 
 
     public TestDto toDto(TestEntity testEntity) {
-        if (testEntity == null) {
+        if (Objects.isNull(testEntity)) {
             return null;
         }
         return TestDto.builder()
@@ -19,7 +21,7 @@ public class TestMapper {
     }
 
     public TestEntity toEntity(TestDto testDto) {
-        if (testDto == null) {
+        if (Objects.isNull(testDto)) {
             return null;
         }
         return TestEntity.builder()

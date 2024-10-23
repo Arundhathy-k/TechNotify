@@ -7,7 +7,7 @@ import com.kovan.service.TestRepositoryService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import java.util.List;
-
+import java.util.Objects;
 
 
 @Service
@@ -20,7 +20,7 @@ public class TestService {
 
     public TestDto addData(TestRequest testRequest) {
 
-        if (testRequest == null) {
+        if (Objects.isNull(testRequest)) {
             return null;
         }
        TestDto testDto = TestDto.builder()

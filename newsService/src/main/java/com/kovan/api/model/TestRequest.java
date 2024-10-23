@@ -6,10 +6,9 @@ import org.springframework.data.mongodb.core.mapping.Document;
 
 
 @Data
-@Document(collection = "TestData")
 public class TestRequest {
 
-    @Id
+   @Id
     private String id;
     private String description;
 
