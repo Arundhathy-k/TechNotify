@@ -17,8 +17,12 @@ import java.util.Objects;
 public class TestService {
 
 
+    private final TestRepositoryService service;
+
     @Autowired
-    private TestRepositoryService service;
+    public TestService(TestRepositoryService service) {
+        this.service = service;
+    }
 
 
     public TestDto addData(TestRequest testRequest) {
@@ -30,8 +34,6 @@ public class TestService {
                 .id(testRequest.getId())
                 .description(testRequest.getDescription())
                 .createdBy(testRequest.getCreatedBy())
-                .createdOn(LocalDate.now().format(DateTimeFormatter.ofPattern("dd-MM-yyyy")))
-                .updatedOn(LocalDate.now().format(DateTimeFormatter.ofPattern("dd-MM-yyyy")))
                 .updatedBy(testRequest.getUpdatedBy())
                 .build();
         return service.saveTestDataInDb(testDto);

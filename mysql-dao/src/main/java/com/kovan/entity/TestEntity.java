@@ -11,7 +11,6 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.Date;
 
 
 @Data
@@ -25,10 +24,15 @@ public class TestEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     private String description;
-    private String createdOn = LocalDate.now().format(DateTimeFormatter.ofPattern("dd-MM-yyyy"));
-    private String createdBy;
-    private String updatedOn = LocalDate.now().format(DateTimeFormatter.ofPattern("dd-MM-yyyy"));
-    private String updatedBy;
+//    private String createdDate = LocalDate.now().format(DateTimeFormatter.ofPattern("dd-MM-yyyy"));
+//    private String createdBy;
+//    private String updatedDate = LocalDate.now().format(DateTimeFormatter.ofPattern("dd-MM-yyyy"));
+//    private String updatedBy;
 
+
+    private LocalDate createdDate;
+    private String createdBy;
+    private LocalDate updatedDate;
+    private String updatedBy;
 
 }
