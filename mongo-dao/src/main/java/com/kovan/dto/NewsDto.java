@@ -18,7 +18,6 @@ import java.util.List;
 @NoArgsConstructor
 public class NewsDto {
 
-    @Id
     private String id;
 
     private String status;

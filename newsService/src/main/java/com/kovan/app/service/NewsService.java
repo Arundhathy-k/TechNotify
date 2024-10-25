@@ -71,13 +71,13 @@ public class NewsService {
         );
 
         if (!isNewsAlreadyInDb(dateOnly.toString())) {
-            NewsDto finalEntity = NewsDto.builder()
+            NewsDto finalDto = NewsDto.builder()
                     .articles(articles)
                     .totalResults(articles.size())
                     .publishedAt(dateOnly.toString())
                     .build();
 
-            newsDto = service.saveNewsInDb(finalEntity);
+            newsDto = service.saveNewsInDb(finalDto);
         }
         return newsDto;
     }
