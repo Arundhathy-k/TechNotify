@@ -1,6 +1,5 @@
 package com.kovan.entity;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -9,8 +8,6 @@ import org.springframework.data.annotation.*;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.Instant;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.List;
 
 @Document(collection = "News")
@@ -37,11 +34,11 @@ public class NewsEntity {
     @LastModifiedDate
     private Instant updatedDate;
 
-    @CreatedBy
-    private String createdBy;
+    @Builder.Default
+    private String createdBy="Arundhathy";
 
-    @LastModifiedBy
-    private String updatedBy;
+    @Builder.Default
+    private String updatedBy="Arundhathy";
 
     @Data
     @Builder

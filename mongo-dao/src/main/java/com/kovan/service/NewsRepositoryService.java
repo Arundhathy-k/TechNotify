@@ -25,7 +25,7 @@ public class NewsRepositoryService {
             throw new NewsRetrievalException("NewsDto cannot be null");
         }
 
-        NewsEntity newsEntity = newsMapper.toEntity(newsDto,"Arundhathy","Arundhathy");
+        NewsEntity newsEntity = newsMapper.toEntity(newsDto);
         NewsEntity savedNews = newsRepository.save(newsEntity);
 
         return newsMapper.toDto(savedNews);

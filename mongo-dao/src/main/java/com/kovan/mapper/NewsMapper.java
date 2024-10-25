@@ -28,7 +28,7 @@ public class NewsMapper {
                 .build();
     }
 
-    public NewsEntity toEntity(NewsDto newsDto,String createdby,String updatedby) {
+    public NewsEntity toEntity(NewsDto newsDto) {
         if (Objects.isNull(newsDto)) {
             return null;
         }
@@ -38,8 +38,6 @@ public class NewsMapper {
                 .totalResults(newsDto.getTotalResults())
                 .publishedAt(StringUtils.isNotEmpty(newsDto.getPublishedAt()) ? newsDto.getPublishedAt() : null)
                 .articles(mapArticlesToEntity(newsDto.getArticles()))
-                .createdBy(createdby)
-                .updatedBy(updatedby)
                 .build();
     }
 
