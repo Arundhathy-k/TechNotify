@@ -1,6 +1,7 @@
 package com.kovan.service;
 
 import com.kovan.dto.NewsDto;
+import com.kovan.exception.NewsRetrievalException;
 import com.kovan.mapper.NewsMapper;
 import com.kovan.entity.NewsEntity;
 import com.kovan.repository.NewsRepository;
@@ -21,11 +22,10 @@ public class NewsRepositoryService {
 
     public NewsDto saveNewsInDb(NewsDto newsDto) {
         if (Objects.isNull(newsDto)) {
-            throw new IllegalArgumentException("NewsDto cannot be null");
+            throw new NewsRetrievalException("NewsDto cannot be null");
         }
 
-        NewsEntity newsEntity = newsMapper.toEntity(newsDto);
-
+        NewsEntity newsEntity = newsMapper.toEntity(newsDto,"Arundhathy","Arundhathy");
         NewsEntity savedNews = newsRepository.save(newsEntity);
 
         return newsMapper.toDto(savedNews);

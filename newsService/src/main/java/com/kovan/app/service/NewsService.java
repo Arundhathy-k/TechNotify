@@ -3,13 +3,13 @@ package com.kovan.app.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kovan.exception.NewsRetrievalException;
 import com.kovan.dto.NewsDto;
 import com.kovan.repository.NewsRepository;
 import com.kovan.service.NewsRepositoryService;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
-
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -19,34 +19,50 @@ import java.util.List;
 @Service
 public class NewsService {
 
-    private final RestTemplate restTemplate = new RestTemplate();
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    @Value("${news.api.url}")
+    private String apiUrl;
 
-    @Autowired
-    private NewsRepositoryService service;
+    @Value("${news.api.country}")
+    private String country;
 
-    @Autowired
-    private NewsRepository newsRepository;
+    @Value("${news.api.category}")
+    private String category;
+
+    @Value("${news.api.key}")
+    private String apiKey;
+
+    private final RestTemplate restTemplate;
+    private final ObjectMapper objectMapper;
+    private final NewsRepositoryService service;
+    private final NewsRepository newsRepository;
+
+    public NewsService(RestTemplate restTemplate, ObjectMapper objectMapper,
+                       NewsRepositoryService service, NewsRepository newsRepository) {
+        this.restTemplate = restTemplate;
+        this.objectMapper = objectMapper;
+        this.service = service;
+        this.newsRepository = newsRepository;
+    }
 
     public NewsDto getTopHeadlines() {
 
-        List<NewsDto> newsList = new ArrayList<>();
+        List<NewsDto.Article> articles = new ArrayList<>();
         int pageSize = 0;
         int page = 1;
-        NewsDto newsDto = null;
-        List<NewsDto.Article> articles = new ArrayList<>();
+        NewsDto newsDto;
 
         do {
             pageSize += 20;
             String apiUrl = buildUrl(page++);
-            String response = restTemplate.getForObject(apiUrl, String.class);
+            String response;
             try {
-
+                response = restTemplate.getForObject(apiUrl, String.class);
                 newsDto = objectMapper.readValue(response, NewsDto.class);
                 articles.addAll(newsDto.getArticles());
             } catch (JsonProcessingException e) {
-                throw new RuntimeException(e);
+                throw new NewsRetrievalException("Failed to parse news data from API response.", e);
             }
+
         } while (pageSize <= newsDto.getTotalResults());
 
         LocalDate dateOnly = LocalDate.parse(
@@ -61,24 +77,22 @@ public class NewsService {
                     .publishedAt(dateOnly.toString())
                     .build();
 
-            newsDto =  service.saveNewsInDb(finalEntity);
-
+            newsDto = service.saveNewsInDb(finalEntity);
         }
-            return  newsDto;
+        return newsDto;
     }
+
     private boolean isNewsAlreadyInDb(String publishedAt) {
         return newsRepository.findByPublishedAt(publishedAt).isPresent();
     }
 
     private String buildUrl(int page) {
-        return "https://newsapi.org/v2/top-headlines?country=us&category=technology&" +
-                "page=" + page +
-                "&apiKey=" + "71a2d5b0f83f460b890e3202b1f1fc55";
+        return String.format("%s?country=%s&category=%s&page=%d&apiKey=%s",
+                apiUrl, country, category, page, apiKey);
     }
+
     public List<NewsDto> getAllData() {
-
-     return service.getAllNewsFromDb();
-
+        return service.getAllNewsFromDb();
     }
 
 }
