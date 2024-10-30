@@ -7,6 +7,7 @@ import com.kovan.exception.NewsRetrievalException;
 import com.kovan.dto.NewsDto;
 import com.kovan.repository.NewsRepository;
 import com.kovan.service.NewsRepositoryService;
+import lombok.Data;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;

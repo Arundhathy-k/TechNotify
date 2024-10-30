@@ -9,7 +9,8 @@ import com.kovan.repository.NewsRepository;
 import com.kovan.service.NewsRepositoryService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.*;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.client.RestTemplate;
 import java.util.Arrays;
@@ -37,7 +38,6 @@ class NewsServiceTests {
 
     @InjectMocks
     private NewsService newsService;
-
 
     @Test
     void testGetTopHeadlines_Success() throws Exception {
