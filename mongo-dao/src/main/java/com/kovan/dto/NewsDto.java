@@ -28,6 +28,7 @@ public class NewsDto {
 
     private   List<Article> articles;
 
+
     @Data
     @Builder
     @AllArgsConstructor

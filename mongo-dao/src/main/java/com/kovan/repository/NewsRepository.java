@@ -9,4 +9,5 @@ import java.util.Optional;
 @Repository
 public interface NewsRepository extends MongoRepository<NewsEntity,String> {
     Optional<NewsEntity> findByPublishedAt(String publishedAt);
+    NewsEntity findTopByOrderByCreatedDateDesc();
 }

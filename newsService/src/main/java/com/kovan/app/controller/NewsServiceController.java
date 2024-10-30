@@ -7,6 +7,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/news")
 public class NewsServiceController {
@@ -15,10 +17,15 @@ public class NewsServiceController {
     private NewsService newsService;
 
 
-    @GetMapping("/top-headlines")
+    @PostMapping("/top-headlines")
     public ResponseEntity<NewsDto> fetchAndSaveTopHeadlines() {
 
         return new ResponseEntity<>(newsService.getTopHeadlines(), HttpStatus.OK);
+    }
+
+    @GetMapping("/fetchAllNews")
+    public ResponseEntity<List<NewsDto>> fetchAllNewsFromDB(){
+        return new ResponseEntity<>(newsService.getAllData(),HttpStatus.OK);
     }
 
 }

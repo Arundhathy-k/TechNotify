@@ -49,7 +49,7 @@ public class NewsService {
         List<NewsDto.Article> articles = new ArrayList<>();
         int pageSize = 0;
         int page = 1;
-        NewsDto newsDto;
+        NewsDto newsDto = new NewsDto();
 
         do {
             pageSize += 20;
@@ -66,7 +66,7 @@ public class NewsService {
         } while (pageSize <= newsDto.getTotalResults());
 
         LocalDate dateOnly = LocalDate.parse(
-                articles.get(0).getPublishedAt(),
+                articles.getFirst().getPublishedAt(),
                 DateTimeFormatter.ISO_DATE_TIME
         );
 
