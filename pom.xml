@@ -29,7 +29,6 @@
 		<module>mysql-dao</module>
 		<module>mongo-dao</module>
 
-
 	</modules>
 	<scm>
 		<connection/>
