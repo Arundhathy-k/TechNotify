@@ -1,6 +1,6 @@
 package com.kovan.exception;
 
-public class NewsRetrievalException extends RuntimeException{
+public class NewsRetrievalException extends RuntimeException {
 
     public NewsRetrievalException(String message) {
         super(message);

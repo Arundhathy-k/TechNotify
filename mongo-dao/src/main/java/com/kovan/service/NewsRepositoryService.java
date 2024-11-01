@@ -1,9 +1,9 @@
 package com.kovan.service;
 
 import com.kovan.dto.NewsDto;
+import com.kovan.entity.NewsEntity;
 import com.kovan.exception.NewsRetrievalException;
 import com.kovan.mapper.NewsMapper;
-import com.kovan.entity.NewsEntity;
 import com.kovan.repository.NewsRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;

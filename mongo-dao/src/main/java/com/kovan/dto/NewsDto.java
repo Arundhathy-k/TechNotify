@@ -22,7 +22,6 @@ public class NewsDto {
 
     private List<Article> articles;
 
-
     @Data
     @Builder
     @AllArgsConstructor
@@ -44,9 +43,6 @@ public class NewsDto {
         public static class Source {
             private String id;
             private String name;
-
-
         }
     }
 }
-

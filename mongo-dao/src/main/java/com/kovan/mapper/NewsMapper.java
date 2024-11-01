@@ -4,8 +4,6 @@ import com.kovan.dto.NewsDto;
 import com.kovan.entity.NewsEntity;
 import io.micrometer.common.util.StringUtils;
 import org.springframework.stereotype.Component;
-
-import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -58,7 +56,6 @@ public class NewsMapper {
                 .orElse(Collections.emptyList());
     }
 
-
     private List<NewsEntity.Article> mapArticlesToEntity(List<NewsDto.Article> articles) {
         return Optional.ofNullable(articles)
                 .map(list -> list.stream()
@@ -75,7 +72,6 @@ public class NewsMapper {
                         .collect(Collectors.toList()))
                 .orElse(Collections.emptyList());
     }
-
 
     private NewsDto.Article.Source mapSourceToDto(NewsEntity.Article.Source source) {
         return Optional.ofNullable(source)
