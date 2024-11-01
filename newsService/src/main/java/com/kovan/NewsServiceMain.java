@@ -11,4 +11,5 @@ public class NewsServiceMain {
 
         SpringApplication.run(NewsServiceMain.class, args);
     }
+
 }
