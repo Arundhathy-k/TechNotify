@@ -4,9 +4,10 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.springframework.data.annotation.*;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.mongodb.core.mapping.Document;
-
 import java.time.Instant;
 import java.util.List;
 
@@ -35,10 +36,10 @@ public class NewsEntity {
     private Instant updatedDate;
 
     @Builder.Default
-    private String createdBy="Arundhathy";
+    private String createdBy = "Arundhathy";
 
     @Builder.Default
-    private String updatedBy="Arundhathy";
+    private String updatedBy = "Arundhathy";
 
     @Data
     @Builder
@@ -62,8 +63,6 @@ public class NewsEntity {
             private String id;
             private String name;
 
-
         }
     }
-
 }

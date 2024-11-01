@@ -1,6 +1,5 @@
 package com.kovan.integration;
 
-
 import com.kovan.app.service.NewsService;
 import com.kovan.dto.NewsDto;
 import com.kovan.repository.NewsRepository;
@@ -53,5 +52,4 @@ public class NewsServiceControllerIT {
     private void cleanup() {
         newsRepository.deleteAll();
     }
-
 }

@@ -1,7 +1,7 @@
 package com.kovan.app.controller;
 
-import com.kovan.dto.NewsDto;
 import com.kovan.app.service.NewsService;
+import com.kovan.dto.NewsDto;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -24,5 +24,4 @@ public class NewsServiceController {
     public ResponseEntity<List<NewsDto>> fetchAllNewsFromDB(){
         return new ResponseEntity<>(newsService.getAllData(),HttpStatus.OK);
     }
-
 }
