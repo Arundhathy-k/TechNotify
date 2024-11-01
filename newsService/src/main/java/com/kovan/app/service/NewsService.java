@@ -92,5 +92,4 @@ public class NewsService {
     public List<NewsDto> getAllData() {
         return service.getAllNewsFromDb();
     }
-
 }
