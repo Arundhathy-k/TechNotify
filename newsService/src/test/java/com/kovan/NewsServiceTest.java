@@ -1,4 +1,4 @@
-package com.kovan.unit;
+package com.kovan;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -21,7 +21,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-class NewsServiceTests {
+class NewsServiceTest {
 
     @Mock
     private RestTemplate restTemplate;

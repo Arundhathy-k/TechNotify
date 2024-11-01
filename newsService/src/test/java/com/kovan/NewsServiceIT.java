@@ -1,4 +1,4 @@
-package com.kovan.integration;
+package com.kovan;
 
 import com.kovan.app.service.NewsService;
 import com.kovan.dto.NewsDto;
@@ -14,7 +14,7 @@ import static org.springframework.boot.test.context.SpringBootTest.WebEnvironmen
 
 @ExtendWith(SpringExtension.class)
 @SpringBootTest(webEnvironment = RANDOM_PORT)
-public class NewsServiceControllerIT {
+public class NewsServiceIT {
 
     @Autowired
     private NewsService newsService;
