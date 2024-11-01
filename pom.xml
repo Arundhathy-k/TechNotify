@@ -28,7 +28,7 @@
 		<module>notificationService</module>
 		<module>mysql-dao</module>
 		<module>mongo-dao</module>
-		<module>newsService</module>
+
 
 	</modules>
 	<scm>
