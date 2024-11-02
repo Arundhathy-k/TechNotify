@@ -2,13 +2,13 @@ package com.kovan.mapper;
 
 import com.kovan.dto.NewsDto;
 import com.kovan.entity.NewsEntity;
-import io.micrometer.common.util.StringUtils;
 import org.springframework.stereotype.Component;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import static io.micrometer.common.util.StringUtils.isNotEmpty;
 
 @Component
 public class NewsMapper {
@@ -21,7 +21,7 @@ public class NewsMapper {
                 .id(newsEntity.getId())
                 .status(newsEntity.getStatus())
                 .totalResults(newsEntity.getTotalResults())
-                .publishedAt(StringUtils.isNotEmpty(newsEntity.getPublishedAt()) ? newsEntity.getPublishedAt() : null)
+                .publishedAt(isNotEmpty(newsEntity.getPublishedAt()) ? newsEntity.getPublishedAt() : null)
                 .articles(mapArticlesToDto(newsEntity.getArticles()))
                 .build();
     }
@@ -34,7 +34,7 @@ public class NewsMapper {
                 .id(newsDto.getId())
                 .status(newsDto.getStatus())
                 .totalResults(newsDto.getTotalResults())
-                .publishedAt(StringUtils.isNotEmpty(newsDto.getPublishedAt()) ? newsDto.getPublishedAt() : null)
+                .publishedAt(isNotEmpty(newsDto.getPublishedAt()) ? newsDto.getPublishedAt() : null)
                 .articles(mapArticlesToEntity(newsDto.getArticles()))
                 .build();
     }
