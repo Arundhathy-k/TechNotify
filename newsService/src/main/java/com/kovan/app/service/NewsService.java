@@ -1,10 +1,9 @@
 package com.kovan.app.service;
 
-
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.kovan.exception.NewsRetrievalException;
 import com.kovan.dto.NewsDto;
+import com.kovan.exception.NewsRetrievalException;
 import com.kovan.repository.NewsRepository;
 import com.kovan.service.NewsRepositoryService;
 import org.springframework.beans.factory.annotation.Value;
@@ -14,7 +13,6 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
-
 
 @Service
 public class NewsService {
@@ -66,7 +64,7 @@ public class NewsService {
         } while (pageSize <= newsDto.getTotalResults());
 
         LocalDate dateOnly = LocalDate.parse(
-                articles.get(0).getPublishedAt(),
+                articles.getFirst().getPublishedAt(),
                 DateTimeFormatter.ISO_DATE_TIME
         );
 
@@ -94,5 +92,4 @@ public class NewsService {
     public List<NewsDto> getAllData() {
         return service.getAllNewsFromDb();
     }
-
 }

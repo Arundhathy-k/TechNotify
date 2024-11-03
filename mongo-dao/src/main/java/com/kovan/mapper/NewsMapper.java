@@ -2,10 +2,8 @@ package com.kovan.mapper;
 
 import com.kovan.dto.NewsDto;
 import com.kovan.entity.NewsEntity;
-import io.micrometer.common.util.StringUtils;
+import static org.apache.commons.lang3.StringUtils.isNotEmpty;
 import org.springframework.stereotype.Component;
-
-import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -23,7 +21,7 @@ public class NewsMapper {
                 .id(newsEntity.getId())
                 .status(newsEntity.getStatus())
                 .totalResults(newsEntity.getTotalResults())
-                .publishedAt(StringUtils.isNotEmpty(newsEntity.getPublishedAt()) ? newsEntity.getPublishedAt() : null)
+                .publishedAt(isNotEmpty(newsEntity.getPublishedAt()) ? newsEntity.getPublishedAt() : null)
                 .articles(mapArticlesToDto(newsEntity.getArticles()))
                 .build();
     }
@@ -36,7 +34,7 @@ public class NewsMapper {
                 .id(newsDto.getId())
                 .status(newsDto.getStatus())
                 .totalResults(newsDto.getTotalResults())
-                .publishedAt(StringUtils.isNotEmpty(newsDto.getPublishedAt()) ? newsDto.getPublishedAt() : null)
+                .publishedAt(isNotEmpty(newsDto.getPublishedAt()) ? newsDto.getPublishedAt() : null)
                 .articles(mapArticlesToEntity(newsDto.getArticles()))
                 .build();
     }
@@ -58,7 +56,6 @@ public class NewsMapper {
                 .orElse(Collections.emptyList());
     }
 
-
     private List<NewsEntity.Article> mapArticlesToEntity(List<NewsDto.Article> articles) {
         return Optional.ofNullable(articles)
                 .map(list -> list.stream()
@@ -75,7 +72,6 @@ public class NewsMapper {
                         .collect(Collectors.toList()))
                 .orElse(Collections.emptyList());
     }
-
 
     private NewsDto.Article.Source mapSourceToDto(NewsEntity.Article.Source source) {
         return Optional.ofNullable(source)
