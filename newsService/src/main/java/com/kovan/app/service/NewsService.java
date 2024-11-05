@@ -3,7 +3,9 @@ package com.kovan.app.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kovan.dto.NewsDto;
+import com.kovan.entity.NewsEntity;
 import com.kovan.exception.NewsRetrievalException;
+import com.kovan.mapper.NewsMapper;
 import com.kovan.repository.NewsRepository;
 import com.kovan.service.NewsRepositoryService;
 import org.springframework.beans.factory.annotation.Value;
@@ -13,6 +15,8 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 
 @Service
 public class NewsService {
@@ -33,13 +37,18 @@ public class NewsService {
     private final ObjectMapper objectMapper;
     private final NewsRepositoryService service;
     private final NewsRepository newsRepository;
+    private final NewsMapper newsMapper;
+
+    LocalDate currentDate = LocalDate.now();
+    LocalDate yesterday = currentDate.minusDays(1);
 
     public NewsService(RestTemplate restTemplate, ObjectMapper objectMapper,
-                       NewsRepositoryService service, NewsRepository newsRepository) {
+                       NewsRepositoryService service, NewsRepository newsRepository, NewsMapper newsMapper) {
         this.restTemplate = restTemplate;
         this.objectMapper = objectMapper;
         this.service = service;
         this.newsRepository = newsRepository;
+        this.newsMapper = newsMapper;
     }
 
     public NewsDto getTopHeadlines() {
@@ -63,25 +72,51 @@ public class NewsService {
 
         } while (pageSize <= newsDto.getTotalResults());
 
-        LocalDate dateOnly = LocalDate.parse(
-                articles.getFirst().getPublishedAt(),
-                DateTimeFormatter.ISO_DATE_TIME
-        );
+        List<NewsDto.Article> newArticles = new ArrayList<>();
+        List<NewsDto.Article> latestArticles = new ArrayList<>();
 
-        if (!isNewsAlreadyInDb(dateOnly.toString())) {
-            NewsDto finalDto = NewsDto.builder()
-                    .articles(articles)
-                    .totalResults(articles.size())
-                    .publishedAt(dateOnly.toString())
-                    .build();
+        boolean isYesterdayInDb = isNewsAlreadyInDb(yesterday.toString());
+        boolean isTodayInDb = isNewsAlreadyInDb(yesterday.plusDays(1).toString());
 
-            newsDto = service.saveNewsInDb(finalDto);
+        articles.forEach(article -> {
+            LocalDate date = LocalDate.parse(article.getPublishedAt(), DateTimeFormatter.ISO_DATE_TIME);
+            if (date.equals(yesterday)) {
+                newArticles.add(article);
+            } else if (date.isBefore(yesterday)) {
+                return;
+            } else if (date.isAfter(yesterday)) {
+                latestArticles.add(article);
+            }
+        });
+        if (newArticles.isEmpty() && latestArticles.isEmpty() && !isYesterdayInDb) {
+            NewsDto dummyNews = NewsDto.builder().totalResults(0)
+                    .publishedAt(yesterday.toString()).status("fail").build();
+            service.saveNewsInDb(dummyNews);
+        } else {
+            if (!isYesterdayInDb && !newArticles.isEmpty()) {
+                saveNews(newArticles, yesterday);
+            }
+            if (!isTodayInDb && !latestArticles.isEmpty()) {
+                saveNews(latestArticles, yesterday.plusDays(1));
+            }
         }
-        return newsDto;
-    }
 
+        return Optional.ofNullable(newsRepository.findByPublishedAt(yesterday.toString()))
+                .map(newsMapper::toDto)
+                .orElse(null);
+    }
+    private void saveNews(List<NewsDto.Article> articles, LocalDate date) {
+        NewsDto finalDto = NewsDto.builder()
+                .articles(articles)
+                .status("ok")
+                .totalResults(articles.size())
+                .publishedAt(date.toString())
+                .build();
+        service.saveNewsInDb(finalDto);
+    }
     private boolean isNewsAlreadyInDb(String publishedAt) {
-        return newsRepository.findByPublishedAt(publishedAt).isPresent();
+        NewsEntity entity = newsRepository.findByPublishedAt(publishedAt);
+        return Objects.nonNull(entity);
     }
 
     private String buildUrl(int page) {

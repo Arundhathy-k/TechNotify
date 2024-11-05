@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kovan.app.service.NewsService;
 import com.kovan.dto.NewsDto;
+import com.kovan.entity.NewsEntity;
 import com.kovan.exception.NewsRetrievalException;
 import com.kovan.repository.NewsRepository;
 import com.kovan.service.NewsRepositoryService;
@@ -15,7 +16,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.client.RestTemplate;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -35,6 +35,9 @@ class NewsServiceTest {
     @Mock
     private NewsRepository newsRepository;
 
+    @Mock
+    private NewsEntity newsEntity;
+
     @InjectMocks
     private NewsService newsService;
 
@@ -47,7 +50,7 @@ class NewsServiceTest {
         when(restTemplate.getForObject(anyString(), eq(String.class))).thenReturn(response);
         when(objectMapper.readValue(anyString(), eq(NewsDto.class))).thenReturn(newsDto);
 
-        when(newsRepository.findByPublishedAt("2023-10-10")).thenReturn(Optional.empty());
+        when(newsRepository.findByPublishedAt("2023-10-10")).thenReturn(newsEntity);
         when(newsRepositoryService.saveNewsInDb(newsDto)).thenReturn(newsDto);
 
         NewsDto result = newsService.getTopHeadlines();
