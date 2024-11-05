@@ -6,7 +6,5 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface NewsRepository extends MongoRepository<NewsEntity, String> {
-
     NewsEntity findByPublishedAt(String publishedAt);
-
 }
