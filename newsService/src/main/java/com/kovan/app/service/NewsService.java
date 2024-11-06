@@ -13,9 +13,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 import static java.util.Objects.*;
 
 @Service
@@ -39,8 +39,10 @@ public class NewsService {
     private final NewsRepository newsRepository;
     private final NewsMapper newsMapper;
 
-    LocalDate currentDate = LocalDate.now();
-    LocalDate yesterday = currentDate.minusDays(1);
+    LocalDate today = LocalDate.now();
+    LocalDate yesterday = today.minusDays(1);
+
+    System.Logger logger = System.getLogger("DateLogger");
 
     public NewsService(RestTemplate restTemplate, ObjectMapper objectMapper,
                        NewsRepositoryService service, NewsRepository newsRepository, NewsMapper newsMapper) {
@@ -51,7 +53,7 @@ public class NewsService {
         this.newsMapper = newsMapper;
     }
 
-    public NewsDto getTopHeadlines() {
+    public List<NewsDto> getTopHeadlines() {
 
         List<NewsDto.Article> articles = new ArrayList<>();
         int pageSize = 0;
@@ -72,44 +74,46 @@ public class NewsService {
 
         } while (pageSize <= newsDto.getTotalResults());
 
-        List<NewsDto.Article> newArticles = null;
-        List<NewsDto.Article> latestArticles = null;
+       AtomicReference<List<NewsDto.Article>> newsArticles = new AtomicReference<>();
+       AtomicReference<List<NewsDto.Article>> futureArticles = new AtomicReference<>();
 
         boolean isYesterdayInDb = isNewsAlreadyInDb(yesterday.toString());
-        boolean isTodayInDb = isNewsAlreadyInDb(currentDate.toString());
+        boolean isTodayInDb = isNewsAlreadyInDb(today.toString());
 
-       for(NewsDto.Article article: articles){
-            LocalDate date = LocalDate.parse(article.getPublishedAt(), DateTimeFormatter.ISO_DATE_TIME);
-            if (date.equals(yesterday)) {
-                if (isNull(newArticles)) {
-                    newArticles = new ArrayList<>();
-                }
-                newArticles.add(article);
-            } else if (date.isBefore(yesterday)) {
-               break;
-            } else if (date.isAfter(yesterday)) {
-                if (isNull(latestArticles)) {
-                    latestArticles = new ArrayList<>();
-                }
-                latestArticles.add(article);
-            }
-        }
-        if (isNull(newArticles) && isNull(latestArticles) && !isYesterdayInDb) {
+        articles.stream()
+                .map(article -> {
+                    LocalDate date = LocalDate.parse(article.getPublishedAt(), DateTimeFormatter.ISO_DATE_TIME);
+                    return new AbstractMap.SimpleEntry<>(article, date);
+                })
+                .takeWhile(entry -> !entry.getValue().isBefore(yesterday))
+                .forEach(entry -> {
+                    NewsDto.Article article = entry.getKey();
+                    LocalDate date = entry.getValue();
+
+                    if (date.equals(yesterday)) {
+                        logger.log(System.Logger.Level.INFO, "equal = {0}", date);
+                        newsArticles.set(createList(newsArticles.get()));
+                        newsArticles.get().add(article);
+                    } else {
+                        logger.log(System.Logger.Level.INFO, "isAfter = {0}", date);
+                        futureArticles.set(createList(futureArticles.get()));
+                        futureArticles.get().add(article);
+                    }
+                });
+
+        if (isNull(newsArticles.get()) && isNull(futureArticles.get()) && !isYesterdayInDb) {
             NewsDto emptyNews = NewsDto.builder().totalResults(0)
                     .publishedAt(yesterday.toString()).status("fail").build();
             service.saveNewsInDb(emptyNews);
         } else {
-            if (!isYesterdayInDb && nonNull(newArticles)) {
-                saveNews(newArticles, yesterday);
+            if (!isYesterdayInDb && nonNull(newsArticles.get())) {
+                saveNews(newsArticles.get(), yesterday);
             }
-            if (!isTodayInDb && nonNull(latestArticles)) {
-                saveNews(latestArticles, currentDate);
+            if (!isTodayInDb && nonNull(futureArticles.get())) {
+                saveNews(futureArticles.get(), today);
             }
         }
-        return Optional.ofNullable(newsRepository.findByPublishedAt(yesterday.toString()))
-                .map(newsMapper::toDto)
-                .orElse(null);
-
+         return fetchSavedNews();
     }
     private void saveNews(List<NewsDto.Article> articles, LocalDate date) {
         NewsDto finalDto = NewsDto.builder()
@@ -120,9 +124,16 @@ public class NewsService {
                 .build();
         service.saveNewsInDb(finalDto);
     }
+    private List<NewsDto.Article> createList(List<NewsDto.Article> list) {
+        return (isNull(list)) ? new ArrayList<>() : list;
+    }
+    private List<NewsDto> fetchSavedNews() {
+        List<String> dates = Arrays.asList(yesterday.toString(), today.toString());
+        List<NewsEntity> newsEntities = newsRepository.findByPublishedAtIn(dates);
+        return newsEntities.stream().map(newsMapper::toDto).collect(Collectors.toList());
+    }
     private boolean isNewsAlreadyInDb(String publishedAt) {
-        NewsEntity entity = newsRepository.findByPublishedAt(publishedAt);
-        return nonNull(entity);
+        return newsRepository.findByPublishedAt(publishedAt).isPresent();
     }
 
     private String buildUrl(int page) {

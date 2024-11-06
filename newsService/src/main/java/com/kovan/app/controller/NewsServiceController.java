@@ -18,7 +18,7 @@ public class NewsServiceController {
     }
 
     @PostMapping("/addTechNews")
-    public ResponseEntity<NewsDto> saveTechNews() {
+    public ResponseEntity<List<NewsDto>> saveTechNews() {
         return new ResponseEntity<>(newsService.getTopHeadlines(), HttpStatus.OK);
     }
 
