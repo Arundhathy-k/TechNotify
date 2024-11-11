@@ -14,7 +14,6 @@ import org.springframework.web.client.RestTemplate;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import static java.util.Objects.*;
 
@@ -74,46 +73,34 @@ public class NewsService {
 
         } while (pageSize <= newsDto.getTotalResults());
 
-        AtomicReference<List<NewsDto.Article>> newsArticles = new AtomicReference<>();
-        AtomicReference<List<NewsDto.Article>> futureArticles = new AtomicReference<>();
-
         boolean isYesterdayInDb = isNewsAlreadyInDb(yesterday.toString());
         boolean isTodayInDb = isNewsAlreadyInDb(today.toString());
 
-        articles.stream()
-                .takeWhile(article -> {
-                    LocalDate date = LocalDate.parse(article.getPublishedAt(), DateTimeFormatter.ISO_DATE_TIME);
-                    logger.log(System.Logger.Level.INFO, "parsedDate = {0}", date);
-                    return !date.isBefore(yesterday);
-                })
-                .forEach(article -> {
-                    LocalDate date = LocalDate.parse(article.getPublishedAt(), DateTimeFormatter.ISO_DATE_TIME);
-                    if (date.equals(yesterday)) {
-                        logger.log(System.Logger.Level.INFO, "equal = {0}", date);
-                        newsArticles.set(createList(newsArticles.get()));
-                        newsArticles.get().add(article);
-                    } else {
-                        logger.log(System.Logger.Level.INFO, "isAfter = {0}", date);
-                        futureArticles.set(createList(futureArticles.get()));
-                        futureArticles.get().add(article);
-                    }
-                });
+        Map<Boolean, List<NewsDto.Article>> partitionedArticles = articles.stream()
+                .takeWhile(article -> !parseDate(article.getPublishedAt()).isBefore(yesterday))
+                .collect(Collectors.partitioningBy(article -> parseDate(article.getPublishedAt()).equals(yesterday)));
 
+        List<NewsDto.Article> newsArticles = getListIfNotEmpty(partitionedArticles.get(true));
+        List<NewsDto.Article> futureArticles = getListIfNotEmpty(partitionedArticles.get(false));
 
-        if (isNull(newsArticles.get()) && isNull(futureArticles.get()) && !isYesterdayInDb) {
+        if (isNull(newsArticles) && isNull(futureArticles) && !isYesterdayInDb) {
             NewsDto emptyNews = NewsDto.builder().totalResults(0)
                     .publishedAt(yesterday.toString()).status("fail").build();
             service.saveNewsInDb(emptyNews);
         } else {
-            if (!isYesterdayInDb && nonNull(newsArticles.get())) {
-                saveNews(newsArticles.get(), yesterday);
+            if (!isYesterdayInDb && nonNull(newsArticles)) {
+                saveNews(newsArticles, yesterday);
             }
-            if (!isTodayInDb && nonNull(futureArticles.get())) {
-                saveNews(futureArticles.get(), today);
+            if (!isTodayInDb && nonNull(futureArticles)) {
+                saveNews(futureArticles, today);
             }
         }
-         return fetchSavedNews();
+         return fetchSavedNews(futureArticles);
     }
+    private LocalDate parseDate(String publishedAt) {
+        return LocalDate.parse(publishedAt, DateTimeFormatter.ISO_DATE_TIME);
+    }
+
     private void saveNews(List<NewsDto.Article> articles, LocalDate date) {
         NewsDto finalDto = NewsDto.builder()
                 .articles(articles)
@@ -123,19 +110,20 @@ public class NewsService {
                 .build();
         service.saveNewsInDb(finalDto);
     }
-    private List<NewsDto.Article> createList(List<NewsDto.Article> list) {
-        return (isNull(list)) ? new ArrayList<>() : list;
+    private List<NewsDto.Article> getListIfNotEmpty(List<NewsDto.Article> articles) {
+        return articles.isEmpty() ? null : createList(articles);
     }
-    private List<NewsDto> fetchSavedNews() {
+    private List<NewsDto.Article> createList(List<NewsDto.Article> articles) {
+        return (articles == null || articles.isEmpty()) ? new ArrayList<>() : articles;
+    }
+    private List<NewsDto> fetchSavedNews(List<NewsDto.Article> futureArticles) {
         String todayDate = today.toString();
         String yesterdayDate = yesterday.toString();
 
         List<NewsEntity> newsEntities = new ArrayList<>();
 
-        Optional<NewsEntity> todayNews = newsRepository.findByPublishedAt(todayDate);
-
-        if (todayNews.isPresent()) {
-            newsEntities.add(todayNews.get());
+        if (nonNull(futureArticles)) {
+            newsRepository.findByPublishedAt(todayDate).ifPresent(newsEntities::add);
             newsRepository.findByPublishedAt(yesterdayDate).ifPresent(newsEntities::add);
         } else {
             newsRepository.findByPublishedAt(yesterdayDate).ifPresent(newsEntities::add);
