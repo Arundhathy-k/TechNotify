@@ -14,7 +14,7 @@ import org.springframework.web.client.RestTemplate;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.stream.Collectors;
+import static java.util.stream.Collectors.*;
 import static java.util.Objects.*;
 
 @Service
@@ -40,8 +40,6 @@ public class NewsService {
 
     LocalDate today = LocalDate.now();
     LocalDate yesterday = today.minusDays(1);
-
-    System.Logger logger = System.getLogger("DateLogger");
 
     public NewsService(RestTemplate restTemplate, ObjectMapper objectMapper,
                        NewsRepositoryService service, NewsRepository newsRepository, NewsMapper newsMapper) {
@@ -78,10 +76,10 @@ public class NewsService {
 
         Map<Boolean, List<NewsDto.Article>> partitionedArticles = articles.stream()
                 .takeWhile(article -> !parseDate(article.getPublishedAt()).isBefore(yesterday))
-                .collect(Collectors.partitioningBy(article -> parseDate(article.getPublishedAt()).equals(yesterday)));
+                .collect(partitioningBy(article -> parseDate(article.getPublishedAt()).equals(yesterday)));
 
-        List<NewsDto.Article> newsArticles = createList(partitionedArticles.get(true));
-        List<NewsDto.Article> futureArticles = createList(partitionedArticles.get(false));
+        List<NewsDto.Article> newsArticles = partitionedArticles.get(true);
+        List<NewsDto.Article> futureArticles = partitionedArticles.get(false);
 
         if (newsArticles.isEmpty() && futureArticles.isEmpty() && !isYesterdayInDb) {
             NewsDto emptyNews = NewsDto.builder().totalResults(0)
@@ -110,10 +108,6 @@ public class NewsService {
                 .build();
         service.saveNewsInDb(finalDto);
     }
-    private List<NewsDto.Article> createList(List<NewsDto.Article> articles) {
-        return (articles == null || articles.isEmpty()) ? new ArrayList<>() : articles;
-    }
-
     private List<NewsDto> fetchSavedNews(List<NewsDto.Article> futureArticles) {
         List<String> datesToFetch = new ArrayList<>();
         datesToFetch.add(yesterday.toString());
@@ -122,7 +116,7 @@ public class NewsService {
         }
         List<NewsEntity> newsEntities = newsRepository.findByPublishedAtIn(datesToFetch);
 
-        return newsEntities.stream().map(newsMapper::toDto).collect(Collectors.toList());
+        return newsEntities.stream().map(newsMapper::toDto).collect(toList());
     }
 
     private boolean isNewsAlreadyInDb(String publishedAt) {
