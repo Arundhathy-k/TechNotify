@@ -14,9 +14,8 @@ import org.springframework.web.client.RestTemplate;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.stream.IntStream;
-import java.util.stream.Stream;
-
+import java.util.concurrent.atomic.AtomicInteger;
+import static java.util.stream.Stream.iterate;
 import static java.util.stream.Collectors.*;
 import static java.util.Objects.*;
 
@@ -41,6 +40,8 @@ public class NewsService {
     private final NewsRepository newsRepository;
     private final NewsMapper newsMapper;
 
+    private static final int DEFAULT_PAGE_SIZE = 20;
+
     LocalDate today = LocalDate.now();
     LocalDate yesterday = today.minusDays(1);
 
@@ -54,18 +55,21 @@ public class NewsService {
     }
     public List<NewsDto> getTopHeadlines() {
 
-        List<NewsDto.Article> articles = IntStream.iterate(1, page -> page + 1)
-                .mapToObj(page -> {
+        AtomicInteger PAGE_SIZE = new AtomicInteger(0);
+
+        List<NewsDto.Article> articles = iterate(1, page -> page + 1)
+                .map(page -> {
                     String apiUrl = buildUrl(page);
                     String response;
                     try {
+                        System.out.println(page);
                         response = restTemplate.getForObject(apiUrl, String.class);
                         return objectMapper.readValue(response, NewsDto.class);
                     } catch (JsonProcessingException e) {
                         throw new NewsRetrievalException("Failed to parse news data from API response.", e);
                     }
                 })
-                .takeWhile(newsDto -> !newsDto.getArticles().isEmpty())
+                .takeWhile(newsDto -> PAGE_SIZE.addAndGet(DEFAULT_PAGE_SIZE) < newsDto.getTotalResults())
                 .flatMap(newsDto -> newsDto.getArticles().stream())
                 .toList();
 
