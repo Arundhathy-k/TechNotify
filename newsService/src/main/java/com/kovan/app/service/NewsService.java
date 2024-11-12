@@ -14,6 +14,9 @@ import org.springframework.web.client.RestTemplate;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
+
 import static java.util.stream.Collectors.*;
 import static java.util.Objects.*;
 
@@ -49,27 +52,22 @@ public class NewsService {
         this.newsRepository = newsRepository;
         this.newsMapper = newsMapper;
     }
-
     public List<NewsDto> getTopHeadlines() {
 
-        List<NewsDto.Article> articles = new ArrayList<>();
-        int pageSize = 0;
-        int page = 1;
-        NewsDto newsDto;
-
-        do {
-            pageSize += 20;
-            String apiUrl = buildUrl(page++);
-            String response;
-            try {
-                response = restTemplate.getForObject(apiUrl, String.class);
-                newsDto = objectMapper.readValue(response, NewsDto.class);
-                articles.addAll(newsDto.getArticles());
-            } catch (JsonProcessingException e) {
-                throw new NewsRetrievalException("Failed to parse news data from API response.", e);
-            }
-
-        } while (pageSize <= newsDto.getTotalResults());
+        List<NewsDto.Article> articles = IntStream.iterate(1, page -> page + 1)
+                .mapToObj(page -> {
+                    String apiUrl = buildUrl(page);
+                    String response;
+                    try {
+                        response = restTemplate.getForObject(apiUrl, String.class);
+                        return objectMapper.readValue(response, NewsDto.class);
+                    } catch (JsonProcessingException e) {
+                        throw new NewsRetrievalException("Failed to parse news data from API response.", e);
+                    }
+                })
+                .takeWhile(newsDto -> !newsDto.getArticles().isEmpty())
+                .flatMap(newsDto -> newsDto.getArticles().stream())
+                .toList();
 
         boolean isYesterdayInDb = isNewsAlreadyInDb(yesterday.toString());
         boolean isTodayInDb = isNewsAlreadyInDb(today.toString());
