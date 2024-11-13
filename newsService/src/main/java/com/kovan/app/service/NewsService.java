@@ -67,7 +67,6 @@ public class NewsService {
                     try {
                         response = restTemplate.getForObject(apiUrl, String.class);
                         NewsDto newsDto =  objectMapper.readValue(response, NewsDto.class);
-                        System.out.println(page);
                         if(isNull(articles.get())) {
                             articles.set(new ArrayList<>());
                         }
