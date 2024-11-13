@@ -94,19 +94,20 @@ public class NewsService {
                     .publishedAt(yesterday.toString()).status("fail").build();
             service.saveNewsInDb(emptyNews);
         } else {
-            if (!isYesterdayInDb && !newsArticles.isEmpty()) {
-                saveNews(newsArticles, yesterday);
-            }
-            if (!isTodayInDb && !futureArticles.isEmpty()) {
-                saveNews(futureArticles, today);
-            }
+           handleNewsSaving(isYesterdayInDb,newsArticles,yesterday);
+           handleNewsSaving(isTodayInDb,futureArticles,today);
         }
          return fetchSavedNews(futureArticles);
+    }
+
+    private void handleNewsSaving(boolean isInDb, List<NewsDto.Article> articles,LocalDate date) {
+        if(!isInDb && !articles.isEmpty()){
+            saveNews(articles,date);
+        }
     }
     private LocalDate parseDate(String publishedAt) {
         return LocalDate.parse(publishedAt, DateTimeFormatter.ISO_DATE_TIME);
     }
-
     private void saveNews(List<NewsDto.Article> articles, LocalDate date) {
         NewsDto finalDto = NewsDto.builder()
                 .articles(articles)
