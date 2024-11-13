@@ -14,9 +14,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Stream;
-
-import static java.util.stream.Stream.iterate;
+import static java.util.Collections.singletonList;
+import static java.util.stream.Stream.*;
 import static java.util.stream.Collectors.*;
 import static java.util.Objects.*;
 
@@ -54,6 +53,11 @@ public class NewsService {
     }
     public List<NewsDto> getTopHeadlines() {
 
+        List<NewsDto.Article> newsArticles;
+        List<NewsDto.Article> futureArticles;
+        Optional <NewsDto> savedYesterdayNewsDto;
+        Optional <NewsDto> savedTodayNewsDto;
+
         AtomicInteger PAGE_SIZE = new AtomicInteger(0);
 
         AtomicReference<List<NewsDto.Article>> articles= new AtomicReference<>();
@@ -84,21 +88,19 @@ public class NewsService {
                 .takeWhile(article -> !parseDate(article.getPublishedAt()).isBefore(yesterday))
                 .collect(partitioningBy(article -> parseDate(article.getPublishedAt()).equals(yesterday)));
 
-        List<NewsDto.Article> newsArticles = partitionedArticles.get(true);
-        List<NewsDto.Article> futureArticles = partitionedArticles.get(false);
-        Optional <NewsDto> savedYesterdayNewsDto;
-        Optional <NewsDto> savedTodayNewsDto;
+        newsArticles = partitionedArticles.get(true);
+        futureArticles = partitionedArticles.get(false);
 
         if (newsArticles.isEmpty() && futureArticles.isEmpty() && !isYesterdayInDb) {
             NewsDto emptyNews = NewsDto.builder().totalResults(0)
                     .publishedAt(yesterday.toString()).status("fail").build();
-           return Collections.singletonList(service.saveNewsInDb(emptyNews));
+           return singletonList(service.saveNewsInDb(emptyNews));
         } else {
             savedYesterdayNewsDto = handleNewsSaving(isYesterdayInDb,newsArticles,yesterday);
             savedTodayNewsDto = handleNewsSaving(isTodayInDb,futureArticles,today);
         }
 
-       return Stream.of(savedTodayNewsDto, savedYesterdayNewsDto)
+       return of(savedTodayNewsDto, savedYesterdayNewsDto)
                .flatMap(Optional::stream)
                .toList();
     }
