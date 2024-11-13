@@ -3,9 +3,7 @@ package com.kovan.app.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kovan.dto.NewsDto;
-import com.kovan.entity.NewsEntity;
 import com.kovan.exception.NewsRetrievalException;
-import com.kovan.mapper.NewsMapper;
 import com.kovan.repository.NewsRepository;
 import com.kovan.service.NewsRepositoryService;
 import org.springframework.beans.factory.annotation.Value;
@@ -16,6 +14,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Stream;
+
 import static java.util.stream.Stream.iterate;
 import static java.util.stream.Collectors.*;
 import static java.util.Objects.*;
@@ -39,7 +39,6 @@ public class NewsService {
     private final ObjectMapper objectMapper;
     private final NewsRepositoryService service;
     private final NewsRepository newsRepository;
-    private final NewsMapper newsMapper;
 
     private static final int DEFAULT_PAGE_SIZE = 20;
 
@@ -47,12 +46,11 @@ public class NewsService {
     LocalDate yesterday = today.minusDays(1);
 
     public NewsService(RestTemplate restTemplate, ObjectMapper objectMapper,
-                       NewsRepositoryService service, NewsRepository newsRepository, NewsMapper newsMapper) {
+                       NewsRepositoryService service, NewsRepository newsRepository) {
         this.restTemplate = restTemplate;
         this.objectMapper = objectMapper;
         this.service = service;
         this.newsRepository = newsRepository;
-        this.newsMapper = newsMapper;
     }
     public List<NewsDto> getTopHeadlines() {
 
@@ -88,44 +86,40 @@ public class NewsService {
 
         List<NewsDto.Article> newsArticles = partitionedArticles.get(true);
         List<NewsDto.Article> futureArticles = partitionedArticles.get(false);
+        Optional <NewsDto> savedYesterdayNewsDto;
+        Optional <NewsDto> savedTodayNewsDto;
 
         if (newsArticles.isEmpty() && futureArticles.isEmpty() && !isYesterdayInDb) {
             NewsDto emptyNews = NewsDto.builder().totalResults(0)
                     .publishedAt(yesterday.toString()).status("fail").build();
-            service.saveNewsInDb(emptyNews);
+           return Collections.singletonList(service.saveNewsInDb(emptyNews));
         } else {
-           handleNewsSaving(isYesterdayInDb,newsArticles,yesterday);
-           handleNewsSaving(isTodayInDb,futureArticles,today);
+            savedYesterdayNewsDto = handleNewsSaving(isYesterdayInDb,newsArticles,yesterday);
+            savedTodayNewsDto = handleNewsSaving(isTodayInDb,futureArticles,today);
         }
-         return fetchSavedNews(futureArticles);
+
+       return Stream.of(savedTodayNewsDto, savedYesterdayNewsDto)
+               .flatMap(Optional::stream)
+               .toList();
     }
 
-    private void handleNewsSaving(boolean isInDb, List<NewsDto.Article> articles,LocalDate date) {
+    private Optional<NewsDto> handleNewsSaving(boolean isInDb, List<NewsDto.Article> articles,LocalDate date) {
         if(!isInDb && !articles.isEmpty()){
-            saveNews(articles,date);
+           return Optional.of(saveNews(articles,date));
         }
+        return Optional.empty();
     }
     private LocalDate parseDate(String publishedAt) {
         return LocalDate.parse(publishedAt, DateTimeFormatter.ISO_DATE_TIME);
     }
-    private void saveNews(List<NewsDto.Article> articles, LocalDate date) {
+    private NewsDto saveNews(List<NewsDto.Article> articles, LocalDate date) {
         NewsDto finalDto = NewsDto.builder()
                 .articles(articles)
                 .status("ok")
                 .totalResults(articles.size())
                 .publishedAt(date.toString())
                 .build();
-        service.saveNewsInDb(finalDto);
-    }
-    private List<NewsDto> fetchSavedNews(List<NewsDto.Article> futureArticles) {
-        List<String> datesToFetch = new ArrayList<>();
-        datesToFetch.add(yesterday.toString());
-        if (nonNull(futureArticles)) {
-            datesToFetch.add(today.toString());
-        }
-        List<NewsEntity> newsEntities = newsRepository.findByPublishedAtIn(datesToFetch);
-
-        return newsEntities.stream().map(newsMapper::toDto).collect(toList());
+       return service.saveNewsInDb(finalDto);
     }
 
     private boolean isNewsAlreadyInDb(String publishedAt) {
