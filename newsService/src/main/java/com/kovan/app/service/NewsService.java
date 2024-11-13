@@ -15,6 +15,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import static java.util.stream.Stream.iterate;
 import static java.util.stream.Collectors.*;
 import static java.util.Objects.*;
@@ -57,26 +58,32 @@ public class NewsService {
 
         AtomicInteger PAGE_SIZE = new AtomicInteger(0);
 
-        List<NewsDto.Article> articles = iterate(1, page -> page + 1)
+        AtomicReference<List<NewsDto.Article>> articles= new AtomicReference<>();
+
+        iterate(1, page -> page + 1)
                 .map(page -> {
                     String apiUrl = buildUrl(page);
                     String response;
                     try {
-                        System.out.println(page);
                         response = restTemplate.getForObject(apiUrl, String.class);
-                        return objectMapper.readValue(response, NewsDto.class);
+                        NewsDto newsDto =  objectMapper.readValue(response, NewsDto.class);
+                        System.out.println(page);
+                        if(isNull(articles.get())) {
+                            articles.set(new ArrayList<>());
+                        }
+                        articles.get().addAll(newsDto.getArticles());
+                        return newsDto;
                     } catch (JsonProcessingException e) {
                         throw new NewsRetrievalException("Failed to parse news data from API response.", e);
                     }
                 })
                 .takeWhile(newsDto -> PAGE_SIZE.addAndGet(DEFAULT_PAGE_SIZE) < newsDto.getTotalResults())
-                .flatMap(newsDto -> newsDto.getArticles().stream())
                 .toList();
 
         boolean isYesterdayInDb = isNewsAlreadyInDb(yesterday.toString());
         boolean isTodayInDb = isNewsAlreadyInDb(today.toString());
 
-        Map<Boolean, List<NewsDto.Article>> partitionedArticles = articles.stream()
+        Map<Boolean, List<NewsDto.Article>> partitionedArticles = articles.get().stream()
                 .takeWhile(article -> !parseDate(article.getPublishedAt()).isBefore(yesterday))
                 .collect(partitioningBy(article -> parseDate(article.getPublishedAt()).equals(yesterday)));
 

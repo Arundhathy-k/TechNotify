@@ -16,6 +16,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.client.RestTemplate;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -48,22 +49,25 @@ class NewsServiceTest {
     LocalDate today = LocalDate.now();
     LocalDate yesterday = today.minusDays(1);
 
+    LocalDateTime todayWithTime = LocalDateTime.now();
+    LocalDateTime yesterdayWithTime = todayWithTime.minusDays(1);
+
     @Test
     void testGetTopHeadlines_Success() throws Exception {
 
         String apiResponse = "{ \"articles\": ["
-                + "{ \"title\": \"Today's News\", \"publishedAt\": \"" + today + "\" },"
-                + "{ \"title\": \"Yesterday's News\", \"publishedAt\": \"" + yesterday + "\" }"
+                + "{ \"title\": \"Today's News\", \"publishedAt\": \""+ todayWithTime + "\" },"
+                + "{ \"title\": \"Yesterday's News\", \"publishedAt\": \""+ yesterdayWithTime + "\" }"
                 + "], \"totalResults\": 2 }";
 
         NewsDto.Article todaysArticle = NewsDto.Article.builder()
                 .title("Today's News")
-                .publishedAt(today.toString())
+                .publishedAt(todayWithTime.toString())
                 .build();
 
         NewsDto.Article yesterdaysArticle = NewsDto.Article.builder()
                 .title("Yesterday's News")
-                .publishedAt(yesterday.toString())
+                .publishedAt(yesterdayWithTime.toString())
                 .build();
 
         NewsDto apiNewsDto = NewsDto.builder()
@@ -121,6 +125,45 @@ class NewsServiceTest {
 
         assertNotNull(result);
         assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void testGetTopHeadlines_OnlyYesterdayNewsPresentInApi() throws Exception {
+        String apiResponse = "{ \"articles\": ["
+                + "{ \"title\": \"Yesterday's News\", \"publishedAt\": \"" + yesterdayWithTime + "\"}"
+                + "], \"totalResults\": 1 }";
+
+        NewsDto.Article yesterdaysArticle = NewsDto.Article.builder()
+                .title("Yesterday's News")
+                .publishedAt(yesterdayWithTime.toString())
+                .build();
+
+        NewsDto apiNewsDto = NewsDto.builder()
+                .totalResults(1)
+                .articles(List.of(yesterdaysArticle))
+                .build();
+
+        NewsEntity yesterdayNewsEntity = NewsEntity.builder()
+                .publishedAt(yesterday.toString())
+                .totalResults(1)
+                .articles(Collections.emptyList())
+                .build();
+
+        when(restTemplate.getForObject(anyString(), eq(String.class))).thenReturn(apiResponse);
+        when(objectMapper.readValue(anyString(), eq(NewsDto.class))).thenReturn(apiNewsDto);
+        when(newsRepository.findByPublishedAt(yesterday.toString())).thenReturn(Optional.empty());
+        when(newsRepository.findByPublishedAt(today.toString())).thenReturn(Optional.empty());
+        when(newsRepository.findByPublishedAtIn(List.of(yesterday.toString(), today.toString())))
+                .thenReturn(List.of(yesterdayNewsEntity));
+        when(newsMapper.toDto(yesterdayNewsEntity)).thenReturn(NewsDto.builder().publishedAt(yesterday.toString()).build());
+
+        List<NewsDto> result = newsService.getTopHeadlines();
+
+        assertNotNull(result);
+        assertEquals(1, result.size());
+        assertEquals(yesterday.toString(), result.getFirst().getPublishedAt());
+
+        verify(newsRepositoryService).saveNewsInDb(argThat(news -> news.getPublishedAt().equals(yesterday.toString())));
     }
 
     @Test
