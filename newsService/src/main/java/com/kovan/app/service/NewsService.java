@@ -11,8 +11,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import static java.util.Collections.singletonList;
+import static java.util.stream.Stream.*;
+import static java.util.stream.Collectors.*;
+import static java.util.Objects.*;
 
 @Service
 public class NewsService {
@@ -34,6 +39,11 @@ public class NewsService {
     private final NewsRepositoryService service;
     private final NewsRepository newsRepository;
 
+    private static final int DEFAULT_PAGE_SIZE = 20;
+
+    LocalDate today = LocalDate.now();
+    LocalDate yesterday = today.minusDays(1);
+
     public NewsService(RestTemplate restTemplate, ObjectMapper objectMapper,
                        NewsRepositoryService service, NewsRepository newsRepository) {
         this.restTemplate = restTemplate;
@@ -41,43 +51,77 @@ public class NewsService {
         this.service = service;
         this.newsRepository = newsRepository;
     }
+    public List<NewsDto> getTopHeadlines() {
 
-    public NewsDto getTopHeadlines() {
+        List<NewsDto.Article> newsArticles;
+        List<NewsDto.Article> futureArticles;
+        Optional <NewsDto> savedYesterdayNewsDto;
+        Optional <NewsDto> savedTodayNewsDto;
 
-        List<NewsDto.Article> articles = new ArrayList<>();
-        int pageSize = 0;
-        int page = 1;
-        NewsDto newsDto;
+        AtomicInteger PAGE_SIZE = new AtomicInteger(0);
 
-        do {
-            pageSize += 20;
-            String apiUrl = buildUrl(page++);
-            String response;
-            try {
-                response = restTemplate.getForObject(apiUrl, String.class);
-                newsDto = objectMapper.readValue(response, NewsDto.class);
-                articles.addAll(newsDto.getArticles());
-            } catch (JsonProcessingException e) {
-                throw new NewsRetrievalException("Failed to parse news data from API response.", e);
-            }
+        AtomicReference<List<NewsDto.Article>> articles= new AtomicReference<>();
 
-        } while (pageSize <= newsDto.getTotalResults());
+        iterate(1, page -> page + 1)
+                .map(page -> {
+                    String apiUrl = buildUrl(page);
+                    String response;
+                    try {
+                        response = restTemplate.getForObject(apiUrl, String.class);
+                        NewsDto newsDto =  objectMapper.readValue(response, NewsDto.class);
+                        if(isNull(articles.get())) {
+                            articles.set(new ArrayList<>());
+                        }
+                        articles.get().addAll(newsDto.getArticles());
+                        return newsDto;
+                    } catch (JsonProcessingException e) {
+                        throw new NewsRetrievalException("Failed to parse news data from API response.", e);
+                    }
+                })
+                .takeWhile(newsDto -> PAGE_SIZE.addAndGet(DEFAULT_PAGE_SIZE) < newsDto.getTotalResults())
+                .toList();
 
-        LocalDate dateOnly = LocalDate.parse(
-                articles.getFirst().getPublishedAt(),
-                DateTimeFormatter.ISO_DATE_TIME
-        );
+        boolean isYesterdayInDb = isNewsAlreadyInDb(yesterday.toString());
+        boolean isTodayInDb = isNewsAlreadyInDb(today.toString());
 
-        if (!isNewsAlreadyInDb(dateOnly.toString())) {
-            NewsDto finalDto = NewsDto.builder()
-                    .articles(articles)
-                    .totalResults(articles.size())
-                    .publishedAt(dateOnly.toString())
-                    .build();
+        Map<Boolean, List<NewsDto.Article>> partitionedArticles = articles.get().stream()
+                .takeWhile(article -> !parseDate(article.getPublishedAt()).isBefore(yesterday))
+                .collect(partitioningBy(article -> parseDate(article.getPublishedAt()).equals(yesterday)));
 
-            newsDto = service.saveNewsInDb(finalDto);
+        newsArticles = partitionedArticles.get(true);
+        futureArticles = partitionedArticles.get(false);
+
+        if (newsArticles.isEmpty() && futureArticles.isEmpty() && !isYesterdayInDb) {
+            NewsDto emptyNews = NewsDto.builder().totalResults(0)
+                    .publishedAt(yesterday.toString()).status("fail").build();
+           return singletonList(service.saveNewsInDb(emptyNews));
+        } else {
+            savedYesterdayNewsDto = handleNewsSaving(isYesterdayInDb,newsArticles,yesterday);
+            savedTodayNewsDto = handleNewsSaving(isTodayInDb,futureArticles,today);
         }
-        return newsDto;
+
+       return of(savedTodayNewsDto, savedYesterdayNewsDto)
+               .flatMap(Optional::stream)
+               .toList();
+    }
+
+    private Optional<NewsDto> handleNewsSaving(boolean isInDb, List<NewsDto.Article> articles,LocalDate date) {
+        if(!isInDb && !articles.isEmpty()){
+           return Optional.of(saveNews(articles,date));
+        }
+        return Optional.empty();
+    }
+    private LocalDate parseDate(String publishedAt) {
+        return LocalDate.parse(publishedAt, DateTimeFormatter.ISO_DATE_TIME);
+    }
+    private NewsDto saveNews(List<NewsDto.Article> articles, LocalDate date) {
+        NewsDto finalDto = NewsDto.builder()
+                .articles(articles)
+                .status("ok")
+                .totalResults(articles.size())
+                .publishedAt(date.toString())
+                .build();
+       return service.saveNewsInDb(finalDto);
     }
 
     private boolean isNewsAlreadyInDb(String publishedAt) {

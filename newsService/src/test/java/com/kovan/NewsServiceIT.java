@@ -23,13 +23,13 @@ public class NewsServiceIT {
 
     @Test
     public void testFetchAndSaveTopHeadlines() {
-        NewsDto newsDto = newsService.getTopHeadlines();
+        List<NewsDto> newsDto = newsService.getTopHeadlines();
         cleanup();
 
         assertThat(newsDto).isNotNull();
-        assertThat(newsDto.getTotalResults()).isGreaterThan(0);
-        assertThat(newsDto.getArticles()).isNotNull();
-        assertThat(newsDto.getArticles().size()).isGreaterThan(0);
+        assertThat(newsDto.getFirst().getTotalResults()).isGreaterThan(0);
+        assertThat(newsDto.getFirst().getArticles()).isNotNull();
+        assertThat(newsDto.getFirst().getArticles().size()).isGreaterThan(0);
 
         List<NewsDto> list = newsService.getAllData();
         assertThat(list.size()).isEqualTo(0);

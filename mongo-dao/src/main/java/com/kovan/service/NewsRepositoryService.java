@@ -27,7 +27,6 @@ public class NewsRepositoryService {
 
         NewsEntity newsEntity = newsMapper.toEntity(newsDto);
         NewsEntity savedNews = newsRepository.save(newsEntity);
-
         return newsMapper.toDto(savedNews);
     }
 
