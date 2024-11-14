@@ -106,10 +106,16 @@ public class NewsService {
     }
 
     private Optional<NewsDto> handleNewsSaving(boolean isInDb, List<NewsDto.Article> articles,LocalDate date) {
-        if(!isInDb && !articles.isEmpty()){
-           return Optional.of(saveNews(articles,date));
+
+        if (articles.isEmpty()) {
+            return Optional.empty();
         }
-        return Optional.empty();
+
+        return isInDb
+                ? newsRepository.findByPublishedAt(date.toString())
+                .filter(existingNews -> articles.size() > existingNews.getTotalResults())
+                .map(existingNews -> updateNews(articles, date))
+                : Optional.of(saveNews(articles, date));
     }
     private LocalDate parseDate(String publishedAt) {
         return LocalDate.parse(publishedAt, DateTimeFormatter.ISO_DATE_TIME);
@@ -123,7 +129,15 @@ public class NewsService {
                 .build();
        return service.saveNewsInDb(finalDto);
     }
-
+    private NewsDto updateNews(List<NewsDto.Article> articles, LocalDate date) {
+        NewsDto finalDto = NewsDto.builder()
+                .articles(articles)
+                .status("ok")
+                .totalResults(articles.size())
+                .publishedAt(date.toString())
+                .build();
+        return service.updateNewsInDb(date.toString(),finalDto);
+    }
     private boolean isNewsAlreadyInDb(String publishedAt) {
         return newsRepository.findByPublishedAt(publishedAt).isPresent();
     }

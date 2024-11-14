@@ -8,8 +8,8 @@ import com.kovan.repository.NewsRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import java.util.List;
-import java.util.Objects;
-import java.util.stream.Collectors;
+import static java.util.Objects.isNull;
+import static java.util.stream.Collectors.toList;
 
 @Service
 public class NewsRepositoryService {
@@ -21,7 +21,7 @@ public class NewsRepositoryService {
     private NewsMapper newsMapper;
 
     public NewsDto saveNewsInDb(NewsDto newsDto) {
-        if (Objects.isNull(newsDto)) {
+        if (isNull(newsDto)) {
             throw new NewsRetrievalException("NewsDto cannot be null");
         }
 
@@ -30,11 +30,33 @@ public class NewsRepositoryService {
         return newsMapper.toDto(savedNews);
     }
 
+    public NewsDto updateNewsInDb(String publishedAt, NewsDto updatedNewsDto) {
+
+        if (isNull(publishedAt) || isNull(updatedNewsDto)) {
+            throw new NewsRetrievalException("Published date and NewsDto cannot be null");
+        }
+
+        NewsEntity existingNewsEntity = newsRepository.findByPublishedAt(publishedAt)
+                .orElseThrow(() -> new NewsRetrievalException("News with published date " + publishedAt + " not found"));
+
+        NewsEntity newNewsEntity = newsMapper.toEntity(updatedNewsDto);
+
+        NewsEntity updatedNewsEntity = NewsEntity.builder()
+                .id(existingNewsEntity.getId())
+                .publishedAt(existingNewsEntity.getPublishedAt())
+                .status(newNewsEntity.getStatus())
+                .articles(newNewsEntity.getArticles())
+                .totalResults(newNewsEntity.getTotalResults())
+                .build();
+
+        return newsMapper.toDto(newsRepository.save(updatedNewsEntity));
+    }
+
     public List<NewsDto> getAllNewsFromDb() {
         List<NewsEntity> newsEntities = newsRepository.findAll();
 
         return newsEntities.stream()
                 .map(newsMapper::toDto)
-                .collect(Collectors.toList());
+                .collect(toList());
     }
 }
