@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import static java.util.Objects.isNull;
 import static java.util.stream.Collectors.toList;
+import static org.apache.commons.lang3.StringUtils.isBlank;
 
 @Service
 public class NewsRepositoryService {
@@ -32,7 +33,7 @@ public class NewsRepositoryService {
 
     public NewsDto updateNewsInDb(String publishedAt, NewsDto updatedNewsDto) {
 
-        if (isNull(publishedAt) || isNull(updatedNewsDto)) {
+        if (isBlank(publishedAt) || isNull(updatedNewsDto)) {
             throw new NewsRetrievalException("Published date and NewsDto cannot be null");
         }
 
@@ -41,7 +42,7 @@ public class NewsRepositoryService {
 
         NewsEntity newNewsEntity = newsMapper.toEntity(updatedNewsDto);
 
-        NewsEntity updatedNewsEntity = NewsEntity.builder()
+        existingNewsEntity = NewsEntity.builder()
                 .id(existingNewsEntity.getId())
                 .publishedAt(existingNewsEntity.getPublishedAt())
                 .status(newNewsEntity.getStatus())
@@ -49,7 +50,7 @@ public class NewsRepositoryService {
                 .totalResults(newNewsEntity.getTotalResults())
                 .build();
 
-        return newsMapper.toDto(newsRepository.save(updatedNewsEntity));
+        return newsMapper.toDto(newsRepository.save(existingNewsEntity));
     }
 
     public List<NewsDto> getAllNewsFromDb() {
