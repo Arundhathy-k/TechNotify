@@ -3,7 +3,9 @@ package com.kovan.app.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kovan.dto.NewsDto;
+import com.kovan.entity.NewsEntity;
 import com.kovan.exception.NewsRetrievalException;
+import com.kovan.mapper.NewsMapper;
 import com.kovan.repository.NewsRepository;
 import com.kovan.service.NewsRepositoryService;
 import org.springframework.beans.factory.annotation.Value;
@@ -38,6 +40,7 @@ public class NewsService {
     private final ObjectMapper objectMapper;
     private final NewsRepositoryService service;
     private final NewsRepository newsRepository;
+    private final NewsMapper newsMapper;
 
     private static final int DEFAULT_PAGE_SIZE = 20;
 
@@ -45,18 +48,19 @@ public class NewsService {
     LocalDate yesterday = today.minusDays(1);
 
     public NewsService(RestTemplate restTemplate, ObjectMapper objectMapper,
-                       NewsRepositoryService service, NewsRepository newsRepository) {
+                       NewsRepositoryService service, NewsRepository newsRepository, NewsMapper newsMapper) {
         this.restTemplate = restTemplate;
         this.objectMapper = objectMapper;
         this.service = service;
         this.newsRepository = newsRepository;
+        this.newsMapper = newsMapper;
     }
     public List<NewsDto> getTopHeadlines() {
 
         List<NewsDto.Article> newsArticles;
         List<NewsDto.Article> futureArticles;
-        Optional <NewsDto> savedYesterdayNewsDto;
-        Optional <NewsDto> savedTodayNewsDto;
+        NewsDto savedYesterdayNewsDto;
+        NewsDto savedTodayNewsDto;
 
         AtomicInteger PAGE_SIZE = new AtomicInteger(0);
 
@@ -100,23 +104,30 @@ public class NewsService {
             savedTodayNewsDto = handleNewsSaving(isTodayInDb,futureArticles,today);
         }
 
-       return of(savedTodayNewsDto, savedYesterdayNewsDto)
-               .flatMap(Optional::stream)
-               .toList();
+       return List.of(savedTodayNewsDto,savedYesterdayNewsDto);
     }
 
-    private Optional<NewsDto> handleNewsSaving(boolean isInDb, List<NewsDto.Article> articles,LocalDate date) {
+    private NewsDto handleNewsSaving(boolean isInDb, List<NewsDto.Article> articles, LocalDate date) {
 
-        if (articles.isEmpty()) {
-            return Optional.empty();
+        Optional<NewsEntity> existingNews = fetchNewsFromDatabase(isInDb, date);
+
+        return existingNews
+                .map(news -> {
+                    if (articles.size() > news.getTotalResults()) {
+                        return updateNews(articles, date);
+                    }
+                    return newsMapper.toDto(news);
+                })
+                .orElseGet(() -> saveNews(articles, date));
+    }
+
+    private Optional<NewsEntity> fetchNewsFromDatabase(boolean isInDb, LocalDate date) {
+        if (isInDb) {
+            return newsRepository.findByPublishedAt(date.toString());
         }
-
-        return isInDb
-                ? newsRepository.findByPublishedAt(date.toString())
-                .filter(existingNews -> articles.size() > existingNews.getTotalResults())
-                .map(existingNews -> updateNews(articles, date))
-                : Optional.of(saveNews(articles, date));
+        return Optional.empty();
     }
+
     private LocalDate parseDate(String publishedAt) {
         return LocalDate.parse(publishedAt, DateTimeFormatter.ISO_DATE_TIME);
     }
