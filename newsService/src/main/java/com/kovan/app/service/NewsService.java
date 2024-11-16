@@ -3,10 +3,7 @@ package com.kovan.app.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kovan.dto.NewsDto;
-import com.kovan.entity.NewsEntity;
 import com.kovan.exception.NewsRetrievalException;
-import com.kovan.mapper.NewsMapper;
-import com.kovan.repository.NewsRepository;
 import com.kovan.service.NewsRepositoryService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -17,9 +14,11 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import static java.util.Collections.singletonList;
-import static java.util.stream.Stream.*;
+import static java.util.Optional.empty;
+import static java.util.Optional.of;
 import static java.util.stream.Collectors.*;
 import static java.util.Objects.*;
+import static java.util.stream.Stream.iterate;
 
 @Service
 public class NewsService {
@@ -39,8 +38,6 @@ public class NewsService {
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
     private final NewsRepositoryService service;
-    private final NewsRepository newsRepository;
-    private final NewsMapper newsMapper;
 
     private static final int DEFAULT_PAGE_SIZE = 20;
 
@@ -48,19 +45,17 @@ public class NewsService {
     LocalDate yesterday = today.minusDays(1);
 
     public NewsService(RestTemplate restTemplate, ObjectMapper objectMapper,
-                       NewsRepositoryService service, NewsRepository newsRepository, NewsMapper newsMapper) {
+                       NewsRepositoryService service) {
         this.restTemplate = restTemplate;
         this.objectMapper = objectMapper;
         this.service = service;
-        this.newsRepository = newsRepository;
-        this.newsMapper = newsMapper;
     }
     public List<NewsDto> getTopHeadlines() {
 
         List<NewsDto.Article> newsArticles;
         List<NewsDto.Article> futureArticles;
-        NewsDto savedYesterdayNewsDto;
-        NewsDto savedTodayNewsDto;
+        Optional<NewsDto> savedYesterdayNewsDto;
+        Optional<NewsDto> savedTodayNewsDto;
 
         AtomicInteger PAGE_SIZE = new AtomicInteger(0);
 
@@ -104,53 +99,58 @@ public class NewsService {
             savedTodayNewsDto = handleNewsSaving(isTodayInDb,futureArticles,today);
         }
 
-       return List.of(savedTodayNewsDto,savedYesterdayNewsDto);
+       return List.of(savedTodayNewsDto.get(),savedYesterdayNewsDto.get());
     }
 
-    private NewsDto handleNewsSaving(boolean isInDb, List<NewsDto.Article> articles, LocalDate date) {
+    private Optional<NewsDto> handleNewsSaving(boolean isInDb, List<NewsDto.Article> articles, LocalDate date) {
 
-        Optional<NewsEntity> existingNews = fetchNewsFromDatabase(isInDb, date);
+        Optional<NewsDto> existingNews = fetchNewsFromDatabase(isInDb, date);
 
         return existingNews
                 .map(news -> {
                     if (articles.size() > news.getTotalResults()) {
-                        return updateNews(articles, date);
+                        return updateNews(articles, date).get();
                     }
-                    return newsMapper.toDto(news);
+                    return news;
                 })
-                .orElseGet(() -> saveNews(articles, date));
+                .or(() -> saveNews(articles, date));
     }
 
-    private Optional<NewsEntity> fetchNewsFromDatabase(boolean isInDb, LocalDate date) {
+    private Optional<NewsDto> fetchNewsFromDatabase(boolean isInDb, LocalDate date) {
         if (isInDb) {
-            return newsRepository.findByPublishedAt(date.toString());
+            return service.findNewsInDb(date.toString());
         }
-        return Optional.empty();
+        return empty();
     }
 
     private LocalDate parseDate(String publishedAt) {
         return LocalDate.parse(publishedAt, DateTimeFormatter.ISO_DATE_TIME);
     }
-    private NewsDto saveNews(List<NewsDto.Article> articles, LocalDate date) {
+    private Optional<NewsDto> saveNews(List<NewsDto.Article> articles, LocalDate date) {
         NewsDto finalDto = NewsDto.builder()
                 .articles(articles)
                 .status("ok")
                 .totalResults(articles.size())
                 .publishedAt(date.toString())
                 .build();
-       return service.saveNewsInDb(finalDto);
+        NewsDto savedNews = service.saveNewsInDb(finalDto);
+        if(isNull(savedNews)){
+            return Optional.empty();
+        }
+        return of(savedNews);
     }
-    private NewsDto updateNews(List<NewsDto.Article> articles, LocalDate date) {
+    private Optional<NewsDto> updateNews(List<NewsDto.Article> articles, LocalDate date) {
         NewsDto finalDto = NewsDto.builder()
                 .articles(articles)
                 .status("ok")
                 .totalResults(articles.size())
                 .publishedAt(date.toString())
                 .build();
+
         return service.updateNewsInDb(date.toString(),finalDto);
     }
     private boolean isNewsAlreadyInDb(String publishedAt) {
-        return newsRepository.findByPublishedAt(publishedAt).isPresent();
+        return service.findNewsInDb(publishedAt).isPresent();
     }
 
     private String buildUrl(int page) {

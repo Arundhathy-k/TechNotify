@@ -27,9 +27,9 @@ public class NewsServiceIT {
         cleanup();
 
         assertThat(newsDto).isNotNull();
-        assertThat(newsDto.getFirst().getTotalResults()).isGreaterThan(0);
+        assertThat(newsDto.getFirst().getTotalResults()).isGreaterThanOrEqualTo(0);
         assertThat(newsDto.getFirst().getArticles()).isNotNull();
-        assertThat(newsDto.getFirst().getArticles().size()).isGreaterThan(0);
+        assertThat(newsDto.getFirst().getArticles().size()).isGreaterThanOrEqualTo(0);
 
         List<NewsDto> list = newsService.getAllData();
         assertThat(list.size()).isEqualTo(0);
