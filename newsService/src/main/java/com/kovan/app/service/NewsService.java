@@ -13,6 +13,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import static java.time.LocalDate.now;
 import static java.util.Collections.singletonList;
 import static java.util.Optional.empty;
 import static java.util.Optional.of;
@@ -37,18 +38,18 @@ public class NewsService {
 
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
-    private final NewsRepositoryService service;
+    private final NewsRepositoryService newsRepositoryService;
 
     private static final int DEFAULT_PAGE_SIZE = 20;
 
-    LocalDate today = LocalDate.now();
+    LocalDate today = now();
     LocalDate yesterday = today.minusDays(1);
 
     public NewsService(RestTemplate restTemplate, ObjectMapper objectMapper,
-                       NewsRepositoryService service) {
+                       NewsRepositoryService newsRepositoryService) {
         this.restTemplate = restTemplate;
         this.objectMapper = objectMapper;
-        this.service = service;
+        this.newsRepositoryService = newsRepositoryService;
     }
     public List<NewsDto> getTopHeadlines() {
 
@@ -93,7 +94,7 @@ public class NewsService {
         if (newsArticles.isEmpty() && futureArticles.isEmpty() && !isYesterdayInDb) {
             NewsDto emptyNews = NewsDto.builder().totalResults(0)
                     .publishedAt(yesterday.toString()).status("fail").build();
-           return singletonList(service.saveNewsInDb(emptyNews));
+           return singletonList(newsRepositoryService.saveNewsInDb(emptyNews));
         } else {
             savedYesterdayNewsDto = handleNewsSaving(isYesterdayInDb,newsArticles,yesterday);
             savedTodayNewsDto = handleNewsSaving(isTodayInDb,futureArticles,today);
@@ -118,7 +119,7 @@ public class NewsService {
 
     private Optional<NewsDto> fetchNewsFromDatabase(boolean isInDb, LocalDate date) {
         if (isInDb) {
-            return service.findNewsInDb(date.toString());
+            return newsRepositoryService.findNewsInDb(date.toString());
         }
         return empty();
     }
@@ -133,7 +134,7 @@ public class NewsService {
                 .totalResults(articles.size())
                 .publishedAt(date.toString())
                 .build();
-        NewsDto savedNews = service.saveNewsInDb(finalDto);
+        NewsDto savedNews = newsRepositoryService.saveNewsInDb(finalDto);
         if(isNull(savedNews)){
             return Optional.empty();
         }
@@ -147,10 +148,10 @@ public class NewsService {
                 .publishedAt(date.toString())
                 .build();
 
-        return service.updateNewsInDb(date.toString(),finalDto);
+        return newsRepositoryService.updateNewsInDb(date.toString(),finalDto);
     }
     private boolean isNewsAlreadyInDb(String publishedAt) {
-        return service.findNewsInDb(publishedAt).isPresent();
+        return newsRepositoryService.findNewsInDb(publishedAt).isPresent();
     }
 
     private String buildUrl(int page) {
@@ -159,6 +160,6 @@ public class NewsService {
     }
 
     public List<NewsDto> getAllData() {
-        return service.getAllNewsFromDb();
+        return newsRepositoryService.getAllNewsFromDb();
     }
 }

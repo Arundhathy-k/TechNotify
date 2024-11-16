@@ -17,7 +17,8 @@ import java.time.LocalDateTime;
 import java.util.Arrays;
 import static java.util.Collections.*;
 import java.util.List;
-import java.util.Optional;
+import static java.util.Optional.of;
+import static java.util.Optional.empty;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -32,7 +33,7 @@ class NewsServiceTest {
     private ObjectMapper objectMapper;
 
     @Mock
-    private NewsRepositoryService service;
+    private NewsRepositoryService newsRepositoryService;
 
     @InjectMocks
     private NewsService newsService;
@@ -68,9 +69,9 @@ class NewsServiceTest {
 
         when(restTemplate.getForObject(anyString(), eq(String.class))).thenReturn(apiResponse);
         when(objectMapper.readValue(anyString(), eq(NewsDto.class))).thenReturn(apiNewsDto);
-        when(service.findNewsInDb(yesterday.toString())).thenReturn(Optional.empty());
-        when(service.findNewsInDb(today.toString())).thenReturn(Optional.empty());
-        when(service.saveNewsInDb(any(NewsDto.class)))
+        when(newsRepositoryService.findNewsInDb(yesterday.toString())).thenReturn(empty());
+        when(newsRepositoryService.findNewsInDb(today.toString())).thenReturn(empty());
+        when(newsRepositoryService.saveNewsInDb(any(NewsDto.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         List<NewsDto> result = newsService.getTopHeadlines();
@@ -80,8 +81,8 @@ class NewsServiceTest {
         assertEquals(today.toString(), result.get(0).getPublishedAt());
         assertEquals(yesterday.toString(), result.get(1).getPublishedAt());
 
-        verify(service).saveNewsInDb(argThat(news -> news.getPublishedAt().equals(yesterday.toString())));
-        verify(service).saveNewsInDb(argThat(news -> news.getPublishedAt().equals(today.toString())));
+        verify(newsRepositoryService).saveNewsInDb(argThat(news -> news.getPublishedAt().equals(yesterday.toString())));
+        verify(newsRepositoryService).saveNewsInDb(argThat(news -> news.getPublishedAt().equals(today.toString())));
     }
 
     @Test
@@ -101,8 +102,8 @@ class NewsServiceTest {
 
         when(restTemplate.getForObject(anyString(), eq(String.class))).thenReturn(apiResponse);
         when(objectMapper.readValue(anyString(), eq(NewsDto.class))).thenReturn(emptyApiNewsDto);
-        when(service.findNewsInDb(yesterday.toString())).thenReturn(Optional.empty());
-        when(service.saveNewsInDb(any(NewsDto.class))).thenReturn(expectedEmptyNews);
+        when(newsRepositoryService.findNewsInDb(yesterday.toString())).thenReturn(empty());
+        when(newsRepositoryService.saveNewsInDb(any(NewsDto.class))).thenReturn(expectedEmptyNews);
 
         List<NewsDto> result = newsService.getTopHeadlines();
 
@@ -112,7 +113,7 @@ class NewsServiceTest {
         assertEquals(yesterday.toString(), result.getFirst().getPublishedAt());
         assertEquals(0, result.getFirst().getTotalResults());
 
-        verify(service).saveNewsInDb(argThat(news ->
+        verify(newsRepositoryService).saveNewsInDb(argThat(news ->
                 news.getPublishedAt().equals(yesterday.toString()) &&
                         news.getStatus().equals("fail") &&
                         news.getTotalResults() == 0
@@ -138,10 +139,10 @@ class NewsServiceTest {
 
         when(restTemplate.getForObject(anyString(), eq(String.class))).thenReturn(apiResponse);
         when(objectMapper.readValue(anyString(), eq(NewsDto.class))).thenReturn(apiNewsDto);
-        when(service.findNewsInDb(yesterday.toString())).thenReturn(Optional.empty());
-        when(service.findNewsInDb(today.toString())).thenReturn(Optional.empty());
+        when(newsRepositoryService.findNewsInDb(yesterday.toString())).thenReturn(empty());
+        when(newsRepositoryService.findNewsInDb(today.toString())).thenReturn(empty());
 
-        when(service.saveNewsInDb(any(NewsDto.class))).thenReturn(
+        when(newsRepositoryService.saveNewsInDb(any(NewsDto.class))).thenReturn(
                 NewsDto.builder().publishedAt(yesterday.toString()).status("ok").totalResults(1).build());
 
         List<NewsDto> result = newsService.getTopHeadlines();
@@ -152,7 +153,7 @@ class NewsServiceTest {
         assertEquals(1, result.getFirst().getTotalResults());
         assertEquals("ok", result.getFirst().getStatus());
 
-        verify(service).saveNewsInDb(argThat(news ->
+        verify(newsRepositoryService).saveNewsInDb(argThat(news ->
                 news.getPublishedAt().equals(yesterday.toString()) &&
                         news.getTotalResults() == 1));
     }
@@ -214,9 +215,9 @@ class NewsServiceTest {
 
         when(restTemplate.getForObject(anyString(), eq(String.class))).thenReturn(apiResponse);
         when(objectMapper.readValue(anyString(), eq(NewsDto.class))).thenReturn(apiNewsDto);
-        when(service.saveNewsInDb(any(NewsDto.class))).thenReturn(existingNewsDto);
-        when(service.findNewsInDb(eq(publishedAtDate))).thenReturn(Optional.of(existingNewsDto));
-        when(service.updateNewsInDb(eq(publishedAtDate), any(NewsDto.class))).thenReturn(Optional.of(updatedNewsDto));
+        when(newsRepositoryService.saveNewsInDb(any(NewsDto.class))).thenReturn(existingNewsDto);
+        when(newsRepositoryService.findNewsInDb(eq(publishedAtDate))).thenReturn(of(existingNewsDto));
+        when(newsRepositoryService.updateNewsInDb(eq(publishedAtDate), any(NewsDto.class))).thenReturn(of(updatedNewsDto));
 
         List<NewsDto> result = newsService.getTopHeadlines();
 
@@ -226,7 +227,7 @@ class NewsServiceTest {
         assertEquals(updatedArticles.size(), result.get(1).getTotalResults());
         assertEquals("ok", result.get(1).getStatus());
 
-        verify(service).updateNewsInDb(eq(publishedAtDate), argThat(news ->
+        verify(newsRepositoryService).updateNewsInDb(eq(publishedAtDate), argThat(news ->
                         news.getArticles().size() == updatedArticles.size() &&
                         news.getStatus().equals("ok")
         ));
@@ -239,11 +240,11 @@ class NewsServiceTest {
         NewsDto news2 = NewsDto.builder().totalResults(1).publishedAt("2023-10-11").articles(List.of(NewsDto.Article.builder().title("News 2").build())).build();
 
         List<NewsDto> expectedNewsList = Arrays.asList(news1, news2);
-        when(service.getAllNewsFromDb()).thenReturn(expectedNewsList);
+        when(newsRepositoryService.getAllNewsFromDb()).thenReturn(expectedNewsList);
 
         List<NewsDto> actualNewsList = newsService.getAllData();
         assertEquals(expectedNewsList, actualNewsList);
-        verify(service).getAllNewsFromDb();
+        verify(newsRepositoryService).getAllNewsFromDb();
     }
 
     @Test
@@ -259,6 +260,6 @@ class NewsServiceTest {
         });
 
         assertEquals("Failed to parse news data from API response.", exception.getMessage());
-        verify(service, never()).saveNewsInDb(any());
+        verify(newsRepositoryService, never()).saveNewsInDb(any());
     }
 }
