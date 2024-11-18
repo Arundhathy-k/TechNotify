@@ -69,8 +69,7 @@ class NewsServiceTest {
 
         when(restTemplate.getForObject(anyString(), eq(String.class))).thenReturn(apiResponse);
         when(objectMapper.readValue(anyString(), eq(NewsDto.class))).thenReturn(apiNewsDto);
-        when(newsRepositoryService.findNewsInDb(yesterday.toString())).thenReturn(empty());
-        when(newsRepositoryService.findNewsInDb(today.toString())).thenReturn(empty());
+        when(newsRepositoryService.findNewsInDb(anyString())).thenReturn(empty());
 
         when(newsRepositoryService.saveNewsInDb(any(NewsDto.class))).thenReturn(NewsDto.builder().publishedAt(today.toString()).status("ok").totalResults(1).build())
                 .thenReturn(NewsDto.builder().publishedAt(yesterday.toString()).status("ok").totalResults(1).build());
@@ -140,8 +139,7 @@ class NewsServiceTest {
 
         when(restTemplate.getForObject(anyString(), eq(String.class))).thenReturn(apiResponse);
         when(objectMapper.readValue(anyString(), eq(NewsDto.class))).thenReturn(apiNewsDto);
-        when(newsRepositoryService.findNewsInDb(yesterday.toString())).thenReturn(empty());
-        when(newsRepositoryService.findNewsInDb(today.toString())).thenReturn(empty());
+        when(newsRepositoryService.findNewsInDb(anyString())).thenReturn(empty());
 
         when(newsRepositoryService.saveNewsInDb(any(NewsDto.class))).thenReturn(
                 NewsDto.builder().publishedAt(yesterday.toString()).status("ok").totalResults(1).build());
