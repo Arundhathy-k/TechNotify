@@ -64,4 +64,7 @@ public class NewsRepositoryService {
                 .map(newsMapper::toDto)
                 .collect(toList());
     }
+    public void deleteAllFromDb(){
+        newsRepository.deleteAll();
+    }
 }
