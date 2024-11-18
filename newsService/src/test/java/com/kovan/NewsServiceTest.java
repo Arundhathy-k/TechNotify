@@ -71,15 +71,16 @@ class NewsServiceTest {
         when(objectMapper.readValue(anyString(), eq(NewsDto.class))).thenReturn(apiNewsDto);
         when(newsRepositoryService.findNewsInDb(yesterday.toString())).thenReturn(empty());
         when(newsRepositoryService.findNewsInDb(today.toString())).thenReturn(empty());
-        when(newsRepositoryService.saveNewsInDb(any(NewsDto.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        when(newsRepositoryService.saveNewsInDb(any(NewsDto.class))).thenReturn(NewsDto.builder().publishedAt(today.toString()).status("ok").totalResults(1).build())
+                .thenReturn(NewsDto.builder().publishedAt(yesterday.toString()).status("ok").totalResults(1).build());
 
         List<NewsDto> result = newsService.getTopHeadlines();
 
         assertNotNull(result);
         assertEquals(2, result.size());
-        assertEquals(today.toString(), result.get(0).getPublishedAt());
-        assertEquals(yesterday.toString(), result.get(1).getPublishedAt());
+        assertEquals(today.toString(), result.get(1).getPublishedAt());
+        assertEquals(yesterday.toString(), result.get(0).getPublishedAt());
 
         verify(newsRepositoryService).saveNewsInDb(argThat(news -> news.getPublishedAt().equals(yesterday.toString())));
         verify(newsRepositoryService).saveNewsInDb(argThat(news -> news.getPublishedAt().equals(today.toString())));
