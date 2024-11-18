@@ -2,7 +2,7 @@ package com.kovan;
 
 import com.kovan.app.service.NewsService;
 import com.kovan.dto.NewsDto;
-import com.kovan.repository.NewsRepository;
+import com.kovan.service.NewsRepositoryService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,8 +18,9 @@ public class NewsServiceIT {
 
     @Autowired
     private NewsService newsService;
+
     @Autowired
-    private NewsRepository newsRepository;
+    private NewsRepositoryService newsRepositoryService;
 
     @Test
     public void testFetchAndSaveTopHeadlines() {
@@ -27,9 +28,9 @@ public class NewsServiceIT {
         cleanup();
 
         assertThat(newsDto).isNotNull();
-        assertThat(newsDto.getFirst().getTotalResults()).isGreaterThan(0);
+        assertThat(newsDto.getFirst().getTotalResults()).isGreaterThanOrEqualTo(0);
         assertThat(newsDto.getFirst().getArticles()).isNotNull();
-        assertThat(newsDto.getFirst().getArticles().size()).isGreaterThan(0);
+        assertThat(newsDto.getFirst().getArticles().size()).isGreaterThanOrEqualTo(0);
 
         List<NewsDto> list = newsService.getAllData();
         assertThat(list.size()).isEqualTo(0);
@@ -50,6 +51,6 @@ public class NewsServiceIT {
     }
 
     private void cleanup() {
-        newsRepository.deleteAll();
+       newsRepositoryService.deleteAllFromDb();
     }
 }

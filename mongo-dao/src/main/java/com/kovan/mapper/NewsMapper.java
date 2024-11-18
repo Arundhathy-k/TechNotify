@@ -2,19 +2,19 @@ package com.kovan.mapper;
 
 import com.kovan.dto.NewsDto;
 import com.kovan.entity.NewsEntity;
+import static java.util.Objects.isNull;
+import static java.util.Optional.ofNullable;
 import static org.apache.commons.lang3.StringUtils.isNotEmpty;
 import org.springframework.stereotype.Component;
 import java.util.Collections;
 import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Component
 public class NewsMapper {
 
     public NewsDto toDto(NewsEntity newsEntity) {
-        if (Objects.isNull(newsEntity)) {
+        if (isNull(newsEntity)) {
             return null;
         }
         return NewsDto.builder()
@@ -27,7 +27,7 @@ public class NewsMapper {
     }
 
     public NewsEntity toEntity(NewsDto newsDto) {
-        if (Objects.isNull(newsDto)) {
+        if (isNull(newsDto)) {
             return null;
         }
         return NewsEntity.builder()
@@ -40,7 +40,7 @@ public class NewsMapper {
     }
 
     private List<NewsDto.Article> mapArticlesToDto(List<NewsEntity.Article> articles) {
-        return Optional.ofNullable(articles)
+        return ofNullable(articles)
                 .map(list -> list.stream()
                         .map(article -> NewsDto.Article.builder()
                                 .source(mapSourceToDto(article.getSource()))
@@ -57,7 +57,7 @@ public class NewsMapper {
     }
 
     private List<NewsEntity.Article> mapArticlesToEntity(List<NewsDto.Article> articles) {
-        return Optional.ofNullable(articles)
+        return ofNullable(articles)
                 .map(list -> list.stream()
                         .map(article -> NewsEntity.Article.builder()
                                 .source(mapSourceToEntity(article.getSource()))
@@ -74,7 +74,7 @@ public class NewsMapper {
     }
 
     private NewsDto.Article.Source mapSourceToDto(NewsEntity.Article.Source source) {
-        return Optional.ofNullable(source)
+        return ofNullable(source)
                 .map(src -> NewsDto.Article.Source.builder()
                         .id(src.getId())
                         .name(src.getName())
@@ -83,7 +83,7 @@ public class NewsMapper {
     }
 
     private NewsEntity.Article.Source mapSourceToEntity(NewsDto.Article.Source source) {
-        return Optional.ofNullable(source)
+        return ofNullable(source)
                 .map(src -> NewsEntity.Article.Source.builder()
                         .id(src.getId())
                         .name(src.getName())

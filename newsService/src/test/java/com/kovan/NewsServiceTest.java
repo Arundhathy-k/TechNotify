@@ -4,10 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kovan.app.service.NewsService;
 import com.kovan.dto.NewsDto;
-import com.kovan.entity.NewsEntity;
 import com.kovan.exception.NewsRetrievalException;
-import com.kovan.mapper.NewsMapper;
-import com.kovan.repository.NewsRepository;
 import com.kovan.service.NewsRepositoryService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -18,9 +15,10 @@ import org.springframework.web.client.RestTemplate;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Arrays;
-import java.util.Collections;
+import static java.util.Collections.*;
 import java.util.List;
-import java.util.Optional;
+import static java.util.Optional.of;
+import static java.util.Optional.empty;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -36,12 +34,6 @@ class NewsServiceTest {
 
     @Mock
     private NewsRepositoryService newsRepositoryService;
-
-    @Mock
-    private NewsRepository newsRepository;
-
-    @Mock
-    private NewsMapper newsMapper;
 
     @InjectMocks
     private NewsService newsService;
@@ -75,63 +67,65 @@ class NewsServiceTest {
                 .articles(List.of(todaysArticle, yesterdaysArticle))
                 .build();
 
-        NewsEntity yesterdayNewsEntity = NewsEntity.builder()
-                .publishedAt(yesterday.toString())
-                .totalResults(1)
-                .articles(Collections.emptyList())
-                .build();
-
-        NewsEntity todayNewsEntity = NewsEntity.builder()
-                .publishedAt(today.toString())
-                .totalResults(1)
-                .articles(Collections.emptyList())
-                .build();
-
         when(restTemplate.getForObject(anyString(), eq(String.class))).thenReturn(apiResponse);
         when(objectMapper.readValue(anyString(), eq(NewsDto.class))).thenReturn(apiNewsDto);
-        when(newsRepository.findByPublishedAt(yesterday.toString())).thenReturn(Optional.empty());
-        when(newsRepository.findByPublishedAt(today.toString())).thenReturn(Optional.empty());
-        when(newsRepository.findByPublishedAtIn(List.of(yesterday.toString(), today.toString())))
-                .thenReturn(List.of(yesterdayNewsEntity, todayNewsEntity));
-        when(newsMapper.toDto(yesterdayNewsEntity)).thenReturn(NewsDto.builder().publishedAt(yesterday.toString()).build());
-        when(newsMapper.toDto(todayNewsEntity)).thenReturn(NewsDto.builder().publishedAt(today.toString()).build());
+        when(newsRepositoryService.findNewsInDb(anyString())).thenReturn(empty());
+
+        when(newsRepositoryService.saveNewsInDb(any(NewsDto.class))).thenReturn(NewsDto.builder().publishedAt(today.toString()).status("ok").totalResults(1).build())
+                .thenReturn(NewsDto.builder().publishedAt(yesterday.toString()).status("ok").totalResults(1).build());
 
         List<NewsDto> result = newsService.getTopHeadlines();
 
         assertNotNull(result);
         assertEquals(2, result.size());
-        assertEquals(yesterday.toString(), result.get(0).getPublishedAt());
         assertEquals(today.toString(), result.get(1).getPublishedAt());
+        assertEquals(yesterday.toString(), result.get(0).getPublishedAt());
 
+        verify(newsRepositoryService).saveNewsInDb(argThat(news -> news.getPublishedAt().equals(yesterday.toString())));
+        verify(newsRepositoryService).saveNewsInDb(argThat(news -> news.getPublishedAt().equals(today.toString())));
     }
 
     @Test
-    void testGetTopHeadlines_NoArticlesFetched_ShouldReturnEmpty() throws Exception {
+    void testGetTopHeadlines_NoArticlesFetched() throws Exception {
         String apiResponse = "{ \"articles\": [], \"totalResults\": 0 }";
 
         NewsDto emptyApiNewsDto = NewsDto.builder()
                 .totalResults(0)
-                .articles(Collections.emptyList())
+                .articles(emptyList())
+                .build();
+
+        NewsDto expectedEmptyNews = NewsDto.builder()
+                .totalResults(0)
+                .status("fail")
+                .publishedAt(yesterday.toString())
                 .build();
 
         when(restTemplate.getForObject(anyString(), eq(String.class))).thenReturn(apiResponse);
         when(objectMapper.readValue(anyString(), eq(NewsDto.class))).thenReturn(emptyApiNewsDto);
-        when(newsRepository.findByPublishedAt(yesterday.toString())).thenReturn(Optional.empty());
-        when(newsRepository.findByPublishedAt(today.toString())).thenReturn(Optional.empty());
-        when(newsRepository.findByPublishedAtIn(List.of(yesterday.toString(), today.toString())))
-                .thenReturn(Collections.emptyList());
+        when(newsRepositoryService.findNewsInDb(yesterday.toString())).thenReturn(empty());
+        when(newsRepositoryService.saveNewsInDb(any(NewsDto.class))).thenReturn(expectedEmptyNews);
 
         List<NewsDto> result = newsService.getTopHeadlines();
 
         assertNotNull(result);
-        assertTrue(result.isEmpty());
+        assertEquals(1, result.size());
+        assertEquals("fail", result.getFirst().getStatus());
+        assertEquals(yesterday.toString(), result.getFirst().getPublishedAt());
+        assertEquals(0, result.getFirst().getTotalResults());
+
+        verify(newsRepositoryService).saveNewsInDb(argThat(news ->
+                news.getPublishedAt().equals(yesterday.toString()) &&
+                        news.getStatus().equals("fail") &&
+                        news.getTotalResults() == 0
+        ));
     }
 
     @Test
     void testGetTopHeadlines_OnlyYesterdayNewsPresentInApi() throws Exception {
-        String apiResponse = "{ \"articles\": ["
-                + "{ \"title\": \"Yesterday's News\", \"publishedAt\": \"" + yesterdayWithTime + "\"}"
-                + "], \"totalResults\": 1 }";
+
+        String apiResponse = "{ \"articles\": [" +
+                "{ \"title\": \"Yesterday's News\", \"publishedAt\": \"" + yesterdayWithTime + "\"}" +
+                "], \"totalResults\": 1 }";
 
         NewsDto.Article yesterdaysArticle = NewsDto.Article.builder()
                 .title("Yesterday's News")
@@ -143,27 +137,99 @@ class NewsServiceTest {
                 .articles(List.of(yesterdaysArticle))
                 .build();
 
-        NewsEntity yesterdayNewsEntity = NewsEntity.builder()
-                .publishedAt(yesterday.toString())
-                .totalResults(1)
-                .articles(Collections.emptyList())
-                .build();
-
         when(restTemplate.getForObject(anyString(), eq(String.class))).thenReturn(apiResponse);
         when(objectMapper.readValue(anyString(), eq(NewsDto.class))).thenReturn(apiNewsDto);
-        when(newsRepository.findByPublishedAt(yesterday.toString())).thenReturn(Optional.empty());
-        when(newsRepository.findByPublishedAt(today.toString())).thenReturn(Optional.empty());
-        when(newsRepository.findByPublishedAtIn(List.of(yesterday.toString(), today.toString())))
-                .thenReturn(List.of(yesterdayNewsEntity));
-        when(newsMapper.toDto(yesterdayNewsEntity)).thenReturn(NewsDto.builder().publishedAt(yesterday.toString()).build());
+        when(newsRepositoryService.findNewsInDb(anyString())).thenReturn(empty());
+
+        when(newsRepositoryService.saveNewsInDb(any(NewsDto.class))).thenReturn(
+                NewsDto.builder().publishedAt(yesterday.toString()).status("ok").totalResults(1).build());
 
         List<NewsDto> result = newsService.getTopHeadlines();
 
         assertNotNull(result);
-        assertEquals(1, result.size());
+        assertEquals(2, result.size());
         assertEquals(yesterday.toString(), result.getFirst().getPublishedAt());
+        assertEquals(1, result.getFirst().getTotalResults());
+        assertEquals("ok", result.getFirst().getStatus());
 
-        verify(newsRepositoryService).saveNewsInDb(argThat(news -> news.getPublishedAt().equals(yesterday.toString())));
+        verify(newsRepositoryService).saveNewsInDb(argThat(news ->
+                news.getPublishedAt().equals(yesterday.toString()) &&
+                        news.getTotalResults() == 1));
+    }
+
+    @Test
+    void testUpdateNewsInDb_ShouldUpdateExistingNews() throws Exception {
+        String publishedAtDate = yesterday.toString();
+
+        NewsDto existingNewsDto = NewsDto.builder()
+                .publishedAt(publishedAtDate)
+                .totalResults(1)
+                .articles(List.of(
+                        NewsDto.Article.builder()
+                                .title("Old Article")
+                                .publishedAt(publishedAtDate)
+                                .build()
+                ))
+                .status("ok")
+                .build();
+
+        List<NewsDto.Article> updatedArticles = List.of(
+                NewsDto.Article.builder()
+                        .title("Updated Article 1")
+                        .publishedAt(yesterdayWithTime.toString())
+                        .build(),
+                NewsDto.Article.builder()
+                        .title("Updated Article 2")
+                        .publishedAt(yesterdayWithTime.toString())
+                        .build()
+        );
+
+        List<NewsDto.Article> articles = List.of(
+                NewsDto.Article.builder()
+                        .title("Updated Article 1")
+                        .publishedAt(publishedAtDate)
+                        .build(),
+                NewsDto.Article.builder()
+                        .title("Updated Article 2")
+                        .publishedAt(publishedAtDate)
+                        .build()
+        );
+
+        NewsDto updatedNewsDto = NewsDto.builder()
+                .publishedAt(publishedAtDate)
+                .totalResults(articles.size())
+                .articles(articles)
+                .status("ok")
+                .build();
+
+        String apiResponse = "{ \"articles\": [" +
+                "{ \"title\": \"Updated Article 1\", \"publishedAt\": \"" + yesterdayWithTime + "\"}," +
+                "{ \"title\": \"Updated Article 2\", \"publishedAt\": \"" + yesterdayWithTime + "\"}" +
+                "], \"totalResults\": 2 }";
+
+        NewsDto apiNewsDto = NewsDto.builder()
+                .totalResults(2)
+                .articles(updatedArticles)
+                .build();
+
+        when(restTemplate.getForObject(anyString(), eq(String.class))).thenReturn(apiResponse);
+        when(objectMapper.readValue(anyString(), eq(NewsDto.class))).thenReturn(apiNewsDto);
+        when(newsRepositoryService.saveNewsInDb(any(NewsDto.class))).thenReturn(existingNewsDto);
+        when(newsRepositoryService.findNewsInDb(eq(publishedAtDate))).thenReturn(of(existingNewsDto));
+        when(newsRepositoryService.updateNewsInDb(eq(publishedAtDate), any(NewsDto.class))).thenReturn(of(updatedNewsDto));
+
+        List<NewsDto> result = newsService.getTopHeadlines();
+
+        assertNotNull(result);
+        assertEquals(2, result.size());
+        assertEquals(publishedAtDate, result.getFirst().getPublishedAt());
+        assertEquals(updatedArticles.size(), result.get(1).getTotalResults());
+        assertEquals("ok", result.get(1).getStatus());
+
+        verify(newsRepositoryService).updateNewsInDb(eq(publishedAtDate), argThat(news ->
+                        news.getArticles().size() == updatedArticles.size() &&
+                        news.getStatus().equals("ok")
+        ));
     }
 
     @Test
@@ -193,7 +259,6 @@ class NewsServiceTest {
         });
 
         assertEquals("Failed to parse news data from API response.", exception.getMessage());
-        verify(newsRepository, never()).findByPublishedAt(anyString());
         verify(newsRepositoryService, never()).saveNewsInDb(any());
     }
 }
