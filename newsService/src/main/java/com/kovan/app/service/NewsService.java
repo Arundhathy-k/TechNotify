@@ -6,8 +6,10 @@ import com.kovan.dto.NewsDto;
 import com.kovan.exception.NewsRetrievalException;
 import com.kovan.service.NewsRepositoryService;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -51,7 +53,15 @@ public class NewsService {
         this.objectMapper = objectMapper;
         this.newsRepositoryService = newsRepositoryService;
     }
+
+    @Scheduled(cron = "0 0 */8 * * *")
     public List<NewsDto> getTopHeadlines() {
+
+        SimpleDateFormat dateFormat = new SimpleDateFormat("dd-MM-yyyy HH:mm:ss.SSS");
+
+        String strDate = dateFormat.format(new Date());
+
+        System.out.println("Task running at - " + strDate);
 
         List<NewsDto.Article> newsArticles;
         List<NewsDto.Article> futureArticles;
