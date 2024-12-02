@@ -59,7 +59,7 @@ public class NewsService {
         this.newsRepositoryService = newsRepositoryService;
     }
 
-    @Scheduled(cron = "0 */8 * * * *")
+    @Scheduled(cron = "0 0 */8 * * *")
     public List<NewsDto> getTopHeadlines() {
 
         SimpleDateFormat dateFormat = new SimpleDateFormat("dd-MM-yyyy HH:mm:ss.SSS");
