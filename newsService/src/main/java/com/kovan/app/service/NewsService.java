@@ -5,6 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kovan.dto.NewsDto;
 import com.kovan.exception.NewsRetrievalException;
 import com.kovan.service.NewsRepositoryService;
+import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -24,6 +27,7 @@ import static java.util.Objects.*;
 import static java.util.stream.Stream.iterate;
 
 @Service
+@Slf4j
 public class NewsService {
 
     @Value("${news.api.url}")
@@ -42,6 +46,7 @@ public class NewsService {
     private final ObjectMapper objectMapper;
     private final NewsRepositoryService newsRepositoryService;
 
+    private static final Logger logger = LoggerFactory.getLogger(NewsService.class);
     private static final int DEFAULT_PAGE_SIZE = 20;
 
     LocalDate today = now();
@@ -54,21 +59,21 @@ public class NewsService {
         this.newsRepositoryService = newsRepositoryService;
     }
 
-    @Scheduled(cron = "0 0 */8 * * *")
+    @Scheduled(cron = "0 */8 * * * *")
     public List<NewsDto> getTopHeadlines() {
 
         SimpleDateFormat dateFormat = new SimpleDateFormat("dd-MM-yyyy HH:mm:ss.SSS");
 
         String strDate = dateFormat.format(new Date());
 
-        System.out.println("Task running at - " + strDate);
+        logger.info("Task running at - {}", strDate);
 
         List<NewsDto.Article> newsArticles;
         List<NewsDto.Article> futureArticles;
         Optional<NewsDto> savedYesterdayNewsDto;
         Optional<NewsDto> savedTodayNewsDto;
 
-        AtomicInteger PAGE_SIZE = new AtomicInteger(0);
+        AtomicInteger pageSize = new AtomicInteger(0);
 
         AtomicReference<List<NewsDto.Article>> articles= new AtomicReference<>();
 
@@ -88,7 +93,7 @@ public class NewsService {
                         throw new NewsRetrievalException("Failed to parse news data from API response.", e);
                     }
                 })
-                .takeWhile(newsDto -> PAGE_SIZE.addAndGet(DEFAULT_PAGE_SIZE) < newsDto.getTotalResults())
+                .takeWhile(newsDto -> pageSize.addAndGet(DEFAULT_PAGE_SIZE) < newsDto.getTotalResults())
                 .toList();
 
         boolean isYesterdayInDb = isNewsAlreadyInDb(yesterday.toString());
