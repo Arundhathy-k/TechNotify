@@ -215,7 +215,7 @@ class NewsServiceTest {
         when(restTemplate.getForObject(anyString(), eq(String.class))).thenReturn(apiResponse);
         when(objectMapper.readValue(anyString(), eq(NewsDto.class))).thenReturn(apiNewsDto);
         when(newsRepositoryService.saveNewsInDb(any(NewsDto.class))).thenReturn(existingNewsDto);
-        when(newsRepositoryService.findNewsInDb(eq(publishedAtDate))).thenReturn(of(existingNewsDto));
+        when(newsRepositoryService.findNewsInDb((publishedAtDate))).thenReturn(of(existingNewsDto));
         when(newsRepositoryService.updateNewsInDb(eq(publishedAtDate), any(NewsDto.class))).thenReturn(of(updatedNewsDto));
 
         List<NewsDto> result = newsService.getTopHeadlines();
@@ -233,7 +233,7 @@ class NewsServiceTest {
     }
 
     @Test
-    void testGetAllData_Success() throws Exception {
+    void testGetAllData_Success() {
         NewsDto news1 = NewsDto.builder().totalResults(1).publishedAt("2023-10-10").articles(List.of(NewsDto.Article.builder().title("News 1").build())).build();
 
         NewsDto news2 = NewsDto.builder().totalResults(1).publishedAt("2023-10-11").articles(List.of(NewsDto.Article.builder().title("News 2").build())).build();

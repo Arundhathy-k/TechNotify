@@ -14,7 +14,7 @@ import static org.springframework.boot.test.context.SpringBootTest.WebEnvironmen
 
 @ExtendWith(SpringExtension.class)
 @SpringBootTest(webEnvironment = RANDOM_PORT)
-public class NewsServiceIT {
+class NewsServiceIT {
 
     @Autowired
     private NewsService newsService;
@@ -23,26 +23,26 @@ public class NewsServiceIT {
     private NewsRepositoryService newsRepositoryService;
 
     @Test
-    public void testFetchAndSaveTopHeadlines() {
+    void testFetchAndSaveTopHeadlines() {
         List<NewsDto> newsDto = newsService.getTopHeadlines();
         cleanup();
 
         assertThat(newsDto).isNotNull();
-        assertThat(newsDto.getFirst().getTotalResults()).isGreaterThanOrEqualTo(0);
+        assertThat(newsDto.getFirst().getTotalResults()).isNotNegative();
         assertThat(newsDto.getFirst().getArticles()).isNotNull();
-        assertThat(newsDto.getFirst().getArticles().size()).isGreaterThanOrEqualTo(0);
+        assertThat(newsDto.getFirst().getArticles().size()).isNotNegative();
 
         List<NewsDto> list = newsService.getAllData();
         assertThat(list.size()).isEqualTo(0);
     }
 
     @Test
-    public void testFetchAllNewsFromDB() {
+    void testFetchAllNewsFromDB() {
         newsService.getTopHeadlines();
         List<NewsDto> newsList = newsService.getAllData();
 
         assertThat(newsList).isNotNull();
-        assertThat(newsList.size()).isGreaterThan(0);
+        assertThat(newsList.size()).isPositive();
         cleanup();
 
         List<NewsDto> list = newsService.getAllData();

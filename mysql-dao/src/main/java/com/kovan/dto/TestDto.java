@@ -2,9 +2,7 @@ package com.kovan.dto;
 
 import lombok.Builder;
 import lombok.Data;
-
 import java.time.LocalDate;
-import java.util.Date;
 
 @Data
 @Builder

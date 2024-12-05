@@ -8,7 +8,6 @@ import static org.apache.commons.lang3.StringUtils.isNotEmpty;
 import org.springframework.stereotype.Component;
 import java.util.Collections;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Component
 public class NewsMapper {
@@ -52,7 +51,7 @@ public class NewsMapper {
                                 .publishedAt(article.getPublishedAt())
                                 .content(article.getContent())
                                 .build())
-                        .collect(Collectors.toList()))
+                                .toList())
                 .orElse(Collections.emptyList());
     }
 
@@ -69,8 +68,8 @@ public class NewsMapper {
                                 .publishedAt(article.getPublishedAt())
                                 .content(article.getContent())
                                 .build())
-                        .collect(Collectors.toList()))
-                .orElse(Collections.emptyList());
+                                .toList())
+                                .orElse(Collections.emptyList());
     }
 
     private NewsDto.Article.Source mapSourceToDto(NewsEntity.Article.Source source) {

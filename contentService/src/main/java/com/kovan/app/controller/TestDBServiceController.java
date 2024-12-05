@@ -3,20 +3,20 @@ package com.kovan.app.controller;
 import com.kovan.api.model.TestRequest;
 import com.kovan.app.service.TestService;
 import com.kovan.dto.TestDto;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/data")
 public class TestDBServiceController {
 
-    @Autowired
-    private TestService testService;
+    private final TestService testService;
 
+    public TestDBServiceController(TestService testService) {
+        this.testService = testService;
+    }
 
     @PostMapping("/add")
     public ResponseEntity<TestDto> addTestData(@RequestBody TestRequest testRequest) {

@@ -79,10 +79,10 @@ public class NewsService {
 
         iterate(1, page -> page + 1)
                 .map(page -> {
-                    String apiUrl = buildUrl(page);
+                    String url = buildUrl(page);
                     String response;
                     try {
-                        response = restTemplate.getForObject(apiUrl, String.class);
+                        response = restTemplate.getForObject(url, String.class);
                         NewsDto newsDto =  objectMapper.readValue(response, NewsDto.class);
                         if(isNull(articles.get())) {
                             articles.set(new ArrayList<>());
