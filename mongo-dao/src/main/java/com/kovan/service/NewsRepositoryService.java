@@ -5,23 +5,24 @@ import com.kovan.entity.NewsEntity;
 import com.kovan.exception.NewsRetrievalException;
 import com.kovan.mapper.NewsMapper;
 import com.kovan.repository.NewsRepository;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.Optional;
 import static java.util.Optional.of;
 import static java.util.Objects.isNull;
-import static java.util.stream.Collectors.toList;
 import static org.apache.commons.lang3.StringUtils.isBlank;
 
 @Service
 public class NewsRepositoryService {
 
-    @Autowired
-    private NewsRepository newsRepository;
+    private final NewsRepository newsRepository;
 
-    @Autowired
-    private NewsMapper newsMapper;
+    private final NewsMapper newsMapper;
+
+    public NewsRepositoryService(NewsRepository newsRepository, NewsMapper newsMapper) {
+        this.newsRepository = newsRepository;
+        this.newsMapper = newsMapper;
+    }
 
     public NewsDto saveNewsInDb(NewsDto newsDto) {
         if (isNull(newsDto)) {
@@ -62,7 +63,7 @@ public class NewsRepositoryService {
 
         return newsEntities.stream()
                 .map(newsMapper::toDto)
-                .collect(toList());
+                .toList();
     }
     public void deleteAllFromDb(){
         newsRepository.deleteAll();
