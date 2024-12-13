@@ -34,13 +34,16 @@ public class JpaConfig {
     @Value("${spring.jpa.properties.hibernate.format_sql}")
     private boolean formatSql;
 
+    @Value("${driverClassName}")
+    private String driverClassName;
+
     @Bean
     public DataSource dataSource() {
         return DataSourceBuilder.create()
                 .url(databaseUrl)
                 .username(username)
                 .password(password)
-                .driverClassName("com.mysql.cj.jdbc.Driver")
+                .driverClassName(driverClassName)
                 .build();
     }
 
