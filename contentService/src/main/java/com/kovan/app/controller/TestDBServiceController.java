@@ -20,7 +20,7 @@ public class TestDBServiceController {
 
     @PostMapping("/add")
     public ResponseEntity<TestDto> addTestData(@RequestBody TestRequest testRequest) {
-        TestDto createdTestData = testService.addData(testRequest);
+        TestDto createdTestData = testService.addOrUpdateData(testRequest);
         return new ResponseEntity<>(createdTestData, HttpStatus.CREATED);
     }
 

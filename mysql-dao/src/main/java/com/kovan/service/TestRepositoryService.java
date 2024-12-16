@@ -6,10 +6,8 @@ import com.kovan.entity.TestEntity;
 import com.kovan.repository.TestRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-
-import java.time.LocalDate;
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.Optional;
 
 @Service
 public class TestRepositoryService {
@@ -23,29 +21,29 @@ public class TestRepositoryService {
         this.testMapper = testMapper;
     }
 
-
     public TestDto saveTestDataInDb(TestDto testDto) {
-
         TestEntity testEntity = TestEntity.builder()
                 .id(testDto.getId())
-                .description(testDto.getDescription())
+                .fileName(testDto.getFileName())
                 .createdBy(testDto.getCreatedBy())
-                .createdDate(LocalDate.now())
+                .createdDate(testDto.getCreatedDate())
                 .updatedBy(testDto.getUpdatedBy())
-                .updatedDate(LocalDate.now())
+                .updatedDate(testDto.getUpdatedDate())
                 .build();
 
         TestEntity savedTest = testRepository.save(testEntity);
-
         return testMapper.toDto(savedTest);
     }
 
     public List<TestDto> getAllTestDataFromDb() {
-        List<TestEntity> testEntities;
-       testEntities = testRepository.findAll();
+        List<TestEntity> testEntities = testRepository.findAll();
         return testEntities.stream()
                 .map(testMapper::toDto)
-                .collect(Collectors.toList());
+                .toList();
+    }
 
+    public Optional<TestDto> findByFileName(String fileName) {
+        return testRepository.findByFileName(fileName)
+                .map(testMapper::toDto);
     }
 }

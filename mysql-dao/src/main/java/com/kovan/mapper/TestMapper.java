@@ -3,12 +3,10 @@ package com.kovan.mapper;
 import com.kovan.dto.TestDto;
 import com.kovan.entity.TestEntity;
 import org.springframework.stereotype.Component;
-
 import java.util.Objects;
 
 @Component
 public class TestMapper {
-
 
     public TestDto toDto(TestEntity testEntity) {
         if (Objects.isNull(testEntity)) {
@@ -16,7 +14,7 @@ public class TestMapper {
         }
         return TestDto.builder()
                 .id(testEntity.getId())
-                .description(testEntity.getDescription())
+                .fileName(testEntity.getFileName())
                 .createdBy(testEntity.getCreatedBy())
                 .updatedBy(testEntity.getUpdatedBy())
                 .createdDate(testEntity.getCreatedDate())
@@ -30,7 +28,7 @@ public class TestMapper {
         }
         return TestEntity.builder()
                 .id(testDto.getId())
-                .description(testDto.getDescription())
+                .fileName(testDto.getFileName())
                 .createdBy(testDto.getCreatedBy())
                 .updatedBy(testDto.getUpdatedBy())
                 .createdDate(testDto.getCreatedDate())
