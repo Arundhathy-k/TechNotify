@@ -5,7 +5,7 @@ import com.kovan.dto.TestDto;
 import com.kovan.service.TestRepositoryService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import java.time.Instant;
+import static java.time.Instant.now;
 import java.util.List;
 import java.util.Optional;
 
@@ -33,8 +33,8 @@ public class TestService {
                     .fileName(testRequest.getFileName())
                     .createdBy(testRequest.getCreatedBy())
                     .updatedBy(testRequest.getUpdatedBy())
-                    .createdDate(Instant.now())
-                    .updatedDate(Instant.now())
+                    .createdDate(now())
+                    .updatedDate(now())
                     .build();
             return service.saveTestDataInDb(newTestDto);
         }
@@ -43,4 +43,9 @@ public class TestService {
     public List<TestDto> getAllData() {
         return service.getAllTestDataFromDb();
     }
+        public TestDto getById(Long id) {
+            return service.findDataById(id)
+                    .orElseThrow(() -> new RuntimeException("Data not found for id: " + id));
+        }
 }
+

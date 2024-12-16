@@ -46,4 +46,7 @@ public class TestRepositoryService {
         return testRepository.findByFileName(fileName)
                 .map(testMapper::toDto);
     }
+    public Optional<TestDto> findDataById(Long id){
+        return testRepository.findById(id).map(testMapper::toDto);
+    }
 }
