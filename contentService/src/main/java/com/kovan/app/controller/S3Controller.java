@@ -1,55 +1,56 @@
 package com.kovan.app.controller;
 
 import com.kovan.app.service.S3Service;
-import org.springframework.core.io.Resource;
-import org.springframework.http.HttpHeaders;
+import com.kovan.app.service.TestService;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-import java.io.IOException;
+import java.util.List;
 
 @RestController
 @RequestMapping("/s3")
 public class S3Controller {
 
    private final S3Service s3Service;
+    private final TestService service;
 
-    public S3Controller(S3Service s3Service) {
+    public S3Controller(S3Service s3Service, TestService service) {
         this.s3Service = s3Service;
+        this.service = service;
     }
 
     @GetMapping("/{bucketName}/download/{id}")
-    public ResponseEntity<Resource> downloadFile(@PathVariable("bucketName") String bucketName,
-                                                 @PathVariable("id") Long id ) throws IOException {
-
-        try {
-         Resource resource = s3Service.downloadFile(bucketName,id);
-          String contentType = "application/octet-stream";
-
+    public ResponseEntity<ByteArrayResource> downloadFile(@PathVariable("bucketName") String bucketName,
+                                                          @PathVariable("id") String id ){
+        String fileName = service.getById(id).getFileName();
+         byte[] data = s3Service.downloadFile(bucketName,id);
+         ByteArrayResource resource = new ByteArrayResource(data);
             return ResponseEntity.ok()
-                    .contentType(MediaType.parseMediaType(contentType))
-                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + resource.getFilename()+ "\"")
+                    .contentLength(data.length)
+                    .header("Content-type","application/octet-stream")
+                    .header("Content-disposition", "attachment; filename=\"" +fileName + "\"")
                     .body(resource);
         }
-        catch (IOException e) {
-            System.err.println("Error downloading file: " + e.getMessage());
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(null);
-        } catch (Exception e) {
-            System.err.println("An unexpected error occurred: " + e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(null);
-        }
-    }
 
     @PostMapping("/{bucketName}/upload")
-    public ResponseEntity<String> uploadFile(@PathVariable("bucketName") String bucketName,@RequestParam("file") MultipartFile file) throws IOException {
+    public ResponseEntity<String> uploadFile(@PathVariable("bucketName") String bucketName,@RequestParam("file") MultipartFile file){
         if (file == null || file.isEmpty()) {
             return ResponseEntity.badRequest().body("File is missing or empty");
         }
-        s3Service.uploadFile(bucketName,file);
-        return ResponseEntity.ok("File uploaded successfully");
+        String uniqueId = s3Service.uploadFile(bucketName, file);
+        return ResponseEntity.ok("File uploaded successfully with ID: " + uniqueId);
+    }
+
+    @GetMapping("/{bucketName}/filesList")
+    public ResponseEntity<List<String>> listFiles(@PathVariable("bucketName") String bucketName) {
+        List<String> files = s3Service.listFiles(bucketName);
+        return ResponseEntity.ok(files);
+    }
+
+    @DeleteMapping("/{bucketName}/delete/{id}")
+    public ResponseEntity<String> deleteFile(@PathVariable("bucketName") String bucketName,@PathVariable("id") String id){
+        return new ResponseEntity<>(s3Service.deleteFile(bucketName,id),HttpStatus.OK);
     }
 }

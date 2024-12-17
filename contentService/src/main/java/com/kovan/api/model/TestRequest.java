@@ -7,7 +7,7 @@ import lombok.Data;
 @Builder
 public class TestRequest {
 
-    private Long id;
+    private String id;
     private String fileName;
     @Builder.Default
     private String createdBy = "Arundhathy";

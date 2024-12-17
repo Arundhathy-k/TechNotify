@@ -43,7 +43,7 @@ public class TestService {
     public List<TestDto> getAllData() {
         return service.getAllTestDataFromDb();
     }
-        public TestDto getById(Long id) {
+        public TestDto getById(String id) {
             return service.findDataById(id)
                     .orElseThrow(() -> new RuntimeException("Data not found for id: " + id));
         }
