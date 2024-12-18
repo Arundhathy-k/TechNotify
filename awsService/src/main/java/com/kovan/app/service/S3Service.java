@@ -3,7 +3,8 @@ package com.kovan.app.service;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.model.*;
 import com.amazonaws.util.IOUtils;
-import com.kovan.api.model.TestRequest;
+import com.kovan.entity.Document;
+import com.kovan.service.DocumentService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -20,9 +21,9 @@ import static java.util.Objects.requireNonNull;
 public class S3Service {
 
     private final AmazonS3 s3Client;
-    private final TestService service;
+    private final DocumentService service;
 
-    public S3Service(AmazonS3 s3Client, TestService service) {
+    public S3Service(AmazonS3 s3Client, DocumentService service) {
         this.s3Client = s3Client;
         this.service = service;
     }
@@ -35,9 +36,9 @@ public class S3Service {
 
         String uniqueId = UUID.randomUUID().toString();
 
-        service.addOrUpdateData(TestRequest.builder()
+        service.saveOrUpdateDocument(Document.builder()
                 .id(uniqueId)
-                .fileName(path).build());
+                .fileName(file.getOriginalFilename()).build());
         try {
             log.info("Uploading file {} to bucket {}, key: {}", file.getOriginalFilename(), bucketName, path);
             s3Client.putObject(bucketName, path, tempFile);
@@ -83,7 +84,7 @@ public class S3Service {
 
     public byte[] downloadFile(String bucketName,String id) {
 
-        S3Object s3Object = s3Client.getObject(bucketName, service.getById(id).getFileName());
+        S3Object s3Object = s3Client.getObject(bucketName, service.findDocumentById(id).getFileName());
         S3ObjectInputStream inputStream = s3Object.getObjectContent();
         try {
             return IOUtils.toByteArray(inputStream);
@@ -93,7 +94,7 @@ public class S3Service {
         return new byte[0];
     }
     public String deleteFile(String bucketName,String id){
-        String fileName = service.getById(id).getFileName();
+        String fileName = service.findDocumentById(id).getFileName();
         s3Client.deleteObject(bucketName, fileName);
         return fileName + " removed ...";
     }

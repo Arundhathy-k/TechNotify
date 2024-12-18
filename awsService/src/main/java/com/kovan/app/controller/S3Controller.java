@@ -1,7 +1,7 @@
 package com.kovan.app.controller;
 
 import com.kovan.app.service.S3Service;
-import com.kovan.app.service.TestService;
+import com.kovan.service.DocumentService;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -14,9 +14,9 @@ import java.util.List;
 public class S3Controller {
 
    private final S3Service s3Service;
-    private final TestService service;
+   private final DocumentService service;
 
-    public S3Controller(S3Service s3Service, TestService service) {
+    public S3Controller(S3Service s3Service, DocumentService service) {
         this.s3Service = s3Service;
         this.service = service;
     }
@@ -24,7 +24,7 @@ public class S3Controller {
     @GetMapping("/{bucketName}/download/{id}")
     public ResponseEntity<ByteArrayResource> downloadFile(@PathVariable("bucketName") String bucketName,
                                                           @PathVariable("id") String id ){
-        String fileName = service.getById(id).getFileName();
+        String fileName = service.findDocumentById(id).getFileName();
          byte[] data = s3Service.downloadFile(bucketName,id);
          ByteArrayResource resource = new ByteArrayResource(data);
             return ResponseEntity.ok()

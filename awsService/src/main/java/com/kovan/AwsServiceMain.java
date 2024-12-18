@@ -4,10 +4,9 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class ContentServiceMain {
-
+public class AwsServiceMain {
     public static void main(String[] args) {
 
-        SpringApplication.run(ContentServiceMain.class, args);
+        SpringApplication.run(AwsServiceMain.class, args);
     }
 }
