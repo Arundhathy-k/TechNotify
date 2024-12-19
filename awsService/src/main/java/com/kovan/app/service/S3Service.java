@@ -71,7 +71,6 @@ public class S3Service {
 
         String html = htmlGeneratorService.generateHtml(userId, name, email, phone, address);
         File pdfFile = pdfConverter.convertHtmlToPdf(html, userId+name + ".pdf");
-     //   String storedId = documentService.findByFileName(pdfFile.getName()).get().getId();
         return processUpload(bucketName, pdfFile);
     }
 
