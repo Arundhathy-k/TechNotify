@@ -35,18 +35,15 @@ public class S3Controller {
         }
 
     @PostMapping("/{bucketName}/upload")
-    public ResponseEntity<String> uploadFile(@PathVariable("bucketName") String bucketName,@RequestParam("file") MultipartFile file){
-        if (file == null || file.isEmpty()) {
-            return ResponseEntity.badRequest().body("File is missing or empty");
-        }
-        String uniqueId = s3Service.uploadFile(bucketName, file);
-        return ResponseEntity.ok("File uploaded successfully with ID: " + uniqueId);
+    public ResponseEntity<List<String>> uploadFile(@PathVariable("bucketName") String bucketName,@RequestParam("file") MultipartFile file) throws Exception {
+
+        return ResponseEntity.ok(s3Service.uploadFile(bucketName, file));
     }
 
     @GetMapping("/{bucketName}/filesList")
     public ResponseEntity<List<String>> listFiles(@PathVariable("bucketName") String bucketName) {
-        List<String> files = s3Service.listFiles(bucketName);
-        return ResponseEntity.ok(files);
+
+        return ResponseEntity.ok(s3Service.listFiles(bucketName));
     }
 
     @DeleteMapping("/{bucketName}/delete/{id}")
