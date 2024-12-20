@@ -94,7 +94,7 @@ public class S3Service {
 
     private String processUpload(File tempFile) {
         String fileTypeFolder = determineFolder(tempFile.getName());
-        String path = fileTypeFolder + tempFile.getName();
+        String path = fileTypeFolder + "/" + tempFile.getName();
         String uniqueId = randomUUID().toString();
 
         String storedId = documentService.saveDocument(Document.builder()

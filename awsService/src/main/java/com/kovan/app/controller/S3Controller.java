@@ -22,16 +22,18 @@ public class S3Controller {
     }
 
     @GetMapping("/download/{id}")
-    public ResponseEntity<ByteArrayResource> downloadFile(@PathVariable("id") String id ){
-        String fileName = service.findDocumentById(id).getFileName();
-         byte[] data = s3Service.downloadFile(id);
-         ByteArrayResource resource = new ByteArrayResource(data);
-            return ResponseEntity.ok()
-                    .contentLength(data.length)
-                    .header("Content-type","application/octet-stream")
-                    .header("Content-disposition", "attachment; filename=\"" +fileName + "\"")
-                    .body(resource);
-        }
+    public ResponseEntity<ByteArrayResource> downloadFile(@PathVariable("id") String id) {
+        String filePath = service.findDocumentById(id).getFileName();
+        String fileName = filePath.substring(filePath.lastIndexOf('/') + 1);
+        byte[] data = s3Service.downloadFile(id);
+        ByteArrayResource resource = new ByteArrayResource(data);
+
+        return ResponseEntity.ok()
+                .contentLength(data.length)
+                .header("Content-Type", "application/octet-stream")
+                .header("Content-Disposition", "attachment; filename=\"" + fileName + "\"")
+                .body(resource);
+    }
 
     @PostMapping("/upload")
     public ResponseEntity<List<String>> uploadFile(@RequestParam("file") MultipartFile file) throws Exception {
