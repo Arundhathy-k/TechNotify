@@ -79,25 +79,25 @@
         <label>User ID: <span>[[${userId}]]</span></label>
         <label>Name: <span>[[${name}]]</span></label>
         Gender <label>
-            <input type="radio" name="gender"> MALE
+            <input type="radio" name="gender"> MALE</input>
         </label>
         <label>
-            <input type="radio" name="gender"> FEMALE
+            <input type="radio" name="gender"> FEMALE</input>
         </label>
         <label>Email: <span>[[${email}]]</span></label>
         <label>Phone Number: <span>[[${phone}]]</span></label>
     </div>
 
     <div class="form-section">
-        <h3>Primary Address</h2>
+        <h3>Primary Address</h3>
         <label>Address: <span>[[${address}]]</span></label>
     </div>
 
     <div class="form-section">
-        <h3>Secondary Address</h2>
+        <h3>Secondary Address</h3>
         <label>
             <input type="checkbox" name="secondary" onchange="toggleSecondaryAddress(this)">
-            Enable Secondary Address
+            Enable Secondary Address</input>
         </label>
         <div class="secondary-address">
             <label>Address 1: <input type="text" placeholder="Enter address 1" /></label>
@@ -111,7 +111,7 @@
     <div class="form-section">
         <label>
             <input type="checkbox" name="agree">
-            I agree all the details are true. If any false statement is provided, you can take any action against me.
+            I agree all the details are true. If any false statement is provided, you can take any action against me.</input>
         </label>
     </div>
 
