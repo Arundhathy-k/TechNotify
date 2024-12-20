@@ -1,10 +1,11 @@
 package com.kovan.app.service;
 
+import com.kovan.app.util.User;
 import org.springframework.stereotype.Service;
 import org.thymeleaf.context.Context;
 import org.thymeleaf.spring6.SpringTemplateEngine;
 import java.util.HashMap;
-import java.util.Locale;
+import static java.util.Locale.getDefault;
 import java.util.Map;
 
 @Service
@@ -16,14 +17,14 @@ public class HtmlGeneratorService {
         this.templateEngine = templateEngine;
     }
 
-    public String generateHtml(String userId, String name, String email, String phone, String address) {
+    public String generateHtml(User user) {
         Map<String, Object> data = new HashMap<>();
-        data.put("userId", userId);
-        data.put("name", name);
-        data.put("email", email);
-        data.put("phone", phone);
-        data.put("address", address);
+        data.put("userId", user.getUserId());
+        data.put("name", user.getName());
+        data.put("email", user.getEmail());
+        data.put("phone", user.getPhone());
+        data.put("address", user.getAddress());
 
-        return templateEngine.process("userTemplate", new Context(Locale.getDefault(), data));
+        return templateEngine.process("userTemplate", new Context(getDefault(), data));
     }
 }

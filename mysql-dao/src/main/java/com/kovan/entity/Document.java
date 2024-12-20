@@ -8,7 +8,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
-import java.time.Instant;
 
 @Data
 @Builder
@@ -22,10 +21,10 @@ public class Document {
     private String fileName;
 
     @CreatedDate
-    private Instant createdDate;
+    private String createdDate;
 
     @LastModifiedDate
-    private Instant updatedDate;
+    private String updatedDate;
 
     @Builder.Default
     private String createdBy = "Arundhathy";
