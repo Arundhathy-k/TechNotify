@@ -74,7 +74,7 @@
 </head>
 <body>
     <h1><u>User Details</u></h1>
-
+    <form>
     <div class="form-section">
         <label>User ID: <span>[[${userId}]]</span></label>
         <label>Name: <span>[[${name}]]</span></label>
@@ -114,7 +114,7 @@
             I agree all the details are true. If any false statement is provided, you can take any action against me.</input>
         </label>
     </div>
-
+</form>
     <p>Yours truly,</p>
     <p>[[${name}]]</p>
 </body>

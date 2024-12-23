@@ -161,23 +161,32 @@ public class S3Service {
     }
 
     public String deleteFile(String id) {
-        Document document = ofNullable(documentService.findDocumentById(id))
-                .orElseThrow(() -> new FileException("Document with id " + id + " not found"));
 
-        String fileName = document.getFileName();
+        String fileName = documentService.findDocumentById(id).getFileName();
         s3Client.deleteObject(bucketName, fileName);
+        documentService.deleteFile(id);
         return fileName + " removed.";
     }
 
     public List<String> listFiles() {
+        List<String> fileNames = new ArrayList<>();
         try {
-            return iterate(s3Client.listObjects(bucketName), ObjectListing::isTruncated, s3Client::listNextBatchOfObjects)
-                    .flatMap(objectListing -> objectListing.getObjectSummaries().stream())
-                    .map(S3ObjectSummary::getKey)
-                    .toList();
+            ObjectListing objectListing = s3Client.listObjects(bucketName);
+
+            while (true) {
+                for (S3ObjectSummary os : objectListing.getObjectSummaries()) {
+                    fileNames.add(os.getKey());
+                }
+                if (objectListing.isTruncated()) {
+                    objectListing = s3Client.listNextBatchOfObjects(objectListing);
+                } else {
+                    break;
+                }
+            }
+            log.info("Listed {} files in bucket {}", fileNames.size(), bucketName);
         } catch (Exception e) {
             log.error("Error listing files in bucket {}", bucketName, e);
-            return emptyList();
         }
+        return fileNames;
     }
 }
