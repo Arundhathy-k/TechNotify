@@ -6,6 +6,7 @@ import com.amazonaws.util.IOUtils;
 import com.kovan.entity.Document;
 import com.kovan.service.DocumentService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import java.io.File;
@@ -20,6 +21,9 @@ import static java.util.Objects.requireNonNull;
 @Slf4j
 public class S3Service {
 
+    @Value("${bucketName}")
+    private String bucketName;
+
     private final AmazonS3 s3Client;
     private final DocumentService service;
 
@@ -28,7 +32,7 @@ public class S3Service {
         this.service = service;
     }
 
-    public String uploadFile(String bucketName, MultipartFile file) {
+    public String uploadFile(MultipartFile file) {
 
         File tempFile = convertMultipartToFile(file);
         String fileTypeFolder = determineFolder(file.getOriginalFilename());
@@ -36,7 +40,7 @@ public class S3Service {
 
         String uniqueId = UUID.randomUUID().toString();
 
-        service.saveOrUpdateDocument(Document.builder()
+        service.saveDocument(Document.builder()
                 .id(uniqueId)
                 .fileName(file.getOriginalFilename()).build());
         try {
@@ -82,7 +86,7 @@ public class S3Service {
         return convertedFile;
     }
 
-    public byte[] downloadFile(String bucketName,String id) {
+    public byte[] downloadFile(String id) {
 
         S3Object s3Object = s3Client.getObject(bucketName, service.findDocumentById(id).getFileName());
         S3ObjectInputStream inputStream = s3Object.getObjectContent();
@@ -93,13 +97,13 @@ public class S3Service {
         }
         return new byte[0];
     }
-    public String deleteFile(String bucketName,String id){
+    public String deleteFile(String id){
         String fileName = service.findDocumentById(id).getFileName();
         s3Client.deleteObject(bucketName, fileName);
         return fileName + " removed ...";
     }
 
-    public List<String> listFiles(String bucketName) {
+    public List<String> listFiles() {
 
         List<String> fileNames = new ArrayList<>();
         try {

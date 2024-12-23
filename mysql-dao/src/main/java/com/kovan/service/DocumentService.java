@@ -16,29 +16,21 @@ public class DocumentService {
         this.documentRepository = documentRepository;
     }
 
-    public void saveOrUpdateDocument(Document document) {
+    public String saveDocument(Document document) {
 
-        Optional<Document> existingDocumentOpt = documentRepository.findByFileName(document.getFileName());
-
-        if (existingDocumentOpt.isPresent()) {
-            Document existingDocument = existingDocumentOpt.get();
-            existingDocument.setUpdatedBy(document.getUpdatedBy());
-            existingDocument.setUpdatedDate(document.getUpdatedDate());
-            documentRepository.save(existingDocument);
-        } else {
-            documentRepository.save(Document.builder()
-                    .id(document.getId())
-                    .fileName(document.getFileName())
-                    .createdBy(document.getCreatedBy())
-                    .createdDate(now())
-                    .updatedBy(document.getUpdatedBy())
-                    .updatedDate(now())
-                    .build());
-        }
+        documentRepository.save(Document.builder()
+                .id(document.getId())
+                .fileName(document.getFileName())
+                .createdBy(document.getCreatedBy())
+                .createdDate(now().toString())
+                .updatedBy(document.getUpdatedBy())
+                .updatedDate(now().toString())
+                .build());
+        return document.getId();
     }
 
     public List<Document> getAllDocumentsFromDb() {
-       return documentRepository.findAll();
+        return documentRepository.findAll();
     }
 
     public Optional<Document> findByFileName(String fileName) {

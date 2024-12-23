@@ -21,11 +21,10 @@ public class S3Controller {
         this.service = service;
     }
 
-    @GetMapping("/{bucketName}/download/{id}")
-    public ResponseEntity<ByteArrayResource> downloadFile(@PathVariable("bucketName") String bucketName,
-                                                          @PathVariable("id") String id ){
+    @GetMapping("/download/{id}")
+    public ResponseEntity<ByteArrayResource> downloadFile(@PathVariable("id") String id ){
         String fileName = service.findDocumentById(id).getFileName();
-         byte[] data = s3Service.downloadFile(bucketName,id);
+         byte[] data = s3Service.downloadFile(id);
          ByteArrayResource resource = new ByteArrayResource(data);
             return ResponseEntity.ok()
                     .contentLength(data.length)
@@ -34,23 +33,23 @@ public class S3Controller {
                     .body(resource);
         }
 
-    @PostMapping("/{bucketName}/upload")
-    public ResponseEntity<String> uploadFile(@PathVariable("bucketName") String bucketName,@RequestParam("file") MultipartFile file){
+    @PostMapping("/upload")
+    public ResponseEntity<String> uploadFile(@RequestParam("file") MultipartFile file){
         if (file == null || file.isEmpty()) {
             return ResponseEntity.badRequest().body("File is missing or empty");
         }
-        String uniqueId = s3Service.uploadFile(bucketName, file);
+        String uniqueId = s3Service.uploadFile(file);
         return ResponseEntity.ok("File uploaded successfully with ID: " + uniqueId);
     }
 
-    @GetMapping("/{bucketName}/filesList")
-    public ResponseEntity<List<String>> listFiles(@PathVariable("bucketName") String bucketName) {
-        List<String> files = s3Service.listFiles(bucketName);
+    @GetMapping("/filesList")
+    public ResponseEntity<List<String>> listFiles() {
+        List<String> files = s3Service.listFiles();
         return ResponseEntity.ok(files);
     }
 
-    @DeleteMapping("/{bucketName}/delete/{id}")
-    public ResponseEntity<String> deleteFile(@PathVariable("bucketName") String bucketName,@PathVariable("id") String id){
-        return new ResponseEntity<>(s3Service.deleteFile(bucketName,id),HttpStatus.OK);
+    @DeleteMapping("/delete/{id}")
+    public ResponseEntity<String> deleteFile(@PathVariable("id") String id){
+        return new ResponseEntity<>(s3Service.deleteFile(id),HttpStatus.OK);
     }
 }
