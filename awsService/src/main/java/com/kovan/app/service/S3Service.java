@@ -33,6 +33,74 @@ public class S3Service {
         this.s3Client = s3Client;
         this.service = service;
     }
+    public String createBucket(String bucketName) {
+        try {
+            CreateBucketRequest createBucketRequest = CreateBucketRequest.builder()
+                    .bucket(bucketName)
+                    .build();
+
+            s3Client.createBucket(createBucketRequest);
+            return "Bucket created successfully: " + bucketName;
+        } catch (S3Exception e) {
+            return "Error creating bucket: " + e.getMessage();
+        }
+    }
+
+    public String deleteBucket(String bucketName) {
+        try {
+            ListObjectsRequest listObjectsRequest = ListObjectsRequest.builder()
+                    .bucket(bucketName)
+                    .build();
+
+            ListObjectsResponse listObjectsResponse = s3Client.listObjects(listObjectsRequest);
+            for (S3Object s3Object : listObjectsResponse.contents()) {
+                DeleteObjectRequest deleteObjectRequest = DeleteObjectRequest.builder()
+                        .bucket(bucketName)
+                        .key(s3Object.key())
+                        .build();
+                s3Client.deleteObject(deleteObjectRequest);
+            }
+
+            DeleteBucketRequest deleteBucketRequest = DeleteBucketRequest.builder()
+                    .bucket(bucketName)
+                    .build();
+            s3Client.deleteBucket(deleteBucketRequest);
+
+            log.info("Bucket {} deleted successfully", bucketName);
+            return "Bucket deleted successfully: " + bucketName;
+        } catch (S3Exception e) {
+            log.error("Error deleting bucket {}: {}", bucketName, e.getMessage());
+            return "Error deleting bucket: " + e.getMessage();
+        }
+    }
+
+    public String renameBucket(String oldBucketName, String newBucketName) {
+        try {
+            createBucket(newBucketName);
+
+            ListObjectsRequest listObjectsRequest = ListObjectsRequest.builder()
+                    .bucket(oldBucketName)
+                    .build();
+
+            ListObjectsResponse listObjectsResponse = s3Client.listObjects(listObjectsRequest);
+            listObjectsResponse.contents().forEach(object -> {
+                CopyObjectRequest copyObjectRequest = CopyObjectRequest.builder()
+                        .sourceBucket(oldBucketName)
+                        .sourceKey(object.key())
+                        .destinationBucket(newBucketName)
+                        .destinationKey(object.key())
+                        .build();
+
+                s3Client.copyObject(copyObjectRequest);
+            });
+
+            deleteBucket(oldBucketName);
+
+            return "Bucket renamed successfully from " + oldBucketName + " to " + newBucketName;
+        } catch (S3Exception e) {
+            return "Error renaming bucket: " + e.getMessage();
+        }
+    }
 
     public String uploadFile(MultipartFile file) {
 

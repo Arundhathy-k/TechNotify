@@ -54,4 +54,22 @@ public class S3Controller {
     public ResponseEntity<String> deleteFile(@PathVariable("id") String id){
         return ResponseEntity.ok(s3Service.deleteFile(id));
     }
+
+    @PostMapping("/createBucket/{bucketName}")
+    public ResponseEntity<String> createBucket(@PathVariable String bucketName) {
+        String response = s3Service.createBucket(bucketName);
+        return ResponseEntity.ok(response);
+    }
+
+    @DeleteMapping("/deleteBucket/{bucketName}")
+    public ResponseEntity<String> deleteBucket(@PathVariable String bucketName) {
+        String response = s3Service.deleteBucket(bucketName);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/renameBucket/{oldBucketName}/{newBucketName}")
+    public ResponseEntity<String> renameBucket(@PathVariable String oldBucketName,@PathVariable String newBucketName) {
+        String response = s3Service.renameBucket(oldBucketName, newBucketName);
+        return ResponseEntity.ok(response);
+    }
 }
