@@ -39,4 +39,7 @@ public class DocumentService {
     public Document findDocumentById(String id){
         return documentRepository.findById(id).orElseThrow(() -> new RuntimeException("Data not found for id: " + id));
     }
+    public void deleteFile(String id){
+        documentRepository.deleteById(id);
+    }
 }

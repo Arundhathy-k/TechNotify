@@ -2,8 +2,8 @@ package com.kovan.app.service;
 
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.model.*;
-import com.amazonaws.util.IOUtils;
 import com.kovan.entity.Document;
+import com.kovan.exception.FileException;
 import com.kovan.service.DocumentService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -14,8 +14,10 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
+import static com.amazonaws.util.IOUtils.toByteArray;
+import static io.micrometer.common.util.StringUtils.isBlank;
 import static java.util.Objects.requireNonNull;
+import static java.util.UUID.randomUUID;
 
 @Service
 @Slf4j
@@ -38,7 +40,7 @@ public class S3Service {
         String fileTypeFolder = determineFolder(file.getOriginalFilename());
         String path = fileTypeFolder + "/" + file.getOriginalFilename();
 
-        String uniqueId = UUID.randomUUID().toString();
+        String uniqueId = randomUUID().toString();
 
         service.saveDocument(Document.builder()
                 .id(uniqueId)
@@ -48,7 +50,7 @@ public class S3Service {
             s3Client.putObject(bucketName, path, tempFile);
         } catch (Exception e) {
             log.error("Error uploading file to S3", e);
-            throw new RuntimeException("File upload failed");
+            throw new FileException("File upload failed", e);
         } finally {
             if (!tempFile.delete()) {
                 log.warn("Temporary file {} could not be deleted", tempFile.getName());
@@ -70,41 +72,55 @@ public class S3Service {
     }
 
     private String getFileExtension(String fileName) {
-        if (fileName == null || !fileName.contains(".")) {
-            throw new IllegalArgumentException("Invalid file name: " + fileName);
+        if (isBlank(fileName) || !fileName.contains(".")) {
+            throw new FileException("Invalid file name: " + fileName);
         }
         return fileName.substring(fileName.lastIndexOf('.') + 1);
     }
 
     private File convertMultipartToFile(MultipartFile file) {
-        File convertedFile = new File(requireNonNull(file.getOriginalFilename()));
-        try(FileOutputStream fos = new FileOutputStream(convertedFile)){
-            fos.write(file.getBytes());
-        }catch (IOException e) {
-           log.error("Error converting multipartFile to file", e);
+        String fileName = requireNonNull(file.getOriginalFilename(), "File name cannot be null");
+        File convertedFile = new File(fileName);
+
+        try (FileOutputStream fos = new FileOutputStream(convertedFile)) {
+            try {
+                fos.write(file.getBytes());
+            } catch (IOException writeException) {
+                log.error("Error writing file bytes to FileOutputStream", writeException);
+                throw new FileException("Error writing to file", writeException);
+            }
+        } catch (IOException e) {
+            log.error("Error converting MultipartFile to File", e);
+            if (convertedFile.exists() && !convertedFile.delete()) {
+                log.warn("Failed to delete partially created file: {}", convertedFile.getAbsolutePath());
+            }
+            throw new FileException("Error converting file", e);
         }
+
         return convertedFile;
     }
 
     public byte[] downloadFile(String id) {
+        String fileName = service.findDocumentById(id).getFileName();
 
-        S3Object s3Object = s3Client.getObject(bucketName, service.findDocumentById(id).getFileName());
-        S3ObjectInputStream inputStream = s3Object.getObjectContent();
-        try {
-            return IOUtils.toByteArray(inputStream);
+        try (S3Object s3Object = s3Client.getObject(bucketName, fileName);
+             S3ObjectInputStream inputStream = s3Object.getObjectContent()) {
+            return toByteArray(inputStream);
         } catch (IOException e) {
             log.error("Error downloading file with id {} from bucket {}", id, bucketName, e);
+            throw new FileException("File download failed", e);
         }
-        return new byte[0];
     }
+
     public String deleteFile(String id){
+
         String fileName = service.findDocumentById(id).getFileName();
         s3Client.deleteObject(bucketName, fileName);
+        service.deleteFile(id);
         return fileName + " removed ...";
     }
 
     public List<String> listFiles() {
-
         List<String> fileNames = new ArrayList<>();
         try {
             ObjectListing objectListing = s3Client.listObjects(bucketName);
@@ -122,6 +138,7 @@ public class S3Service {
             log.info("Listed {} files in bucket {}", fileNames.size(), bucketName);
         } catch (Exception e) {
             log.error("Error listing files in bucket {}", bucketName, e);
+            throw new FileException("Failed to list files in bucket: " + bucketName, e);
         }
         return fileNames;
     }
