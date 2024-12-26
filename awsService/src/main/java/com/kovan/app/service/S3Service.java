@@ -13,11 +13,10 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 import static io.micrometer.common.util.StringUtils.isBlank;
-import static java.lang.Boolean.TRUE;
 import static java.util.UUID.randomUUID;
+import static java.util.stream.Stream.iterate;
 
 @Service
 @Slf4j
@@ -38,29 +37,18 @@ public class S3Service {
             CreateBucketRequest createBucketRequest = CreateBucketRequest.builder()
                     .bucket(bucketName)
                     .build();
-
             s3Client.createBucket(createBucketRequest);
+            log.info("Bucket {} created successfully", bucketName);
             return "Bucket created successfully: " + bucketName;
         } catch (S3Exception e) {
+            log.error("Error creating bucket {}: {}", bucketName, e.getMessage());
             return "Error creating bucket: " + e.getMessage();
         }
     }
 
     public String deleteBucket(String bucketName) {
         try {
-            ListObjectsRequest listObjectsRequest = ListObjectsRequest.builder()
-                    .bucket(bucketName)
-                    .build();
-
-            ListObjectsResponse listObjectsResponse = s3Client.listObjects(listObjectsRequest);
-            for (S3Object s3Object : listObjectsResponse.contents()) {
-                DeleteObjectRequest deleteObjectRequest = DeleteObjectRequest.builder()
-                        .bucket(bucketName)
-                        .key(s3Object.key())
-                        .build();
-                s3Client.deleteObject(deleteObjectRequest);
-            }
-
+            deleteAllObjects(bucketName);
             DeleteBucketRequest deleteBucketRequest = DeleteBucketRequest.builder()
                     .bucket(bucketName)
                     .build();
@@ -74,30 +62,66 @@ public class S3Service {
         }
     }
 
+    private void deleteAllObjects(String bucketName) {
+        ListObjectsV2Request listObjectsV2Request = ListObjectsV2Request.builder()
+                .bucket(bucketName)
+                .build();
+        s3Client.listObjectsV2Paginator(listObjectsV2Request).stream()
+                .flatMap(response -> response.contents().stream())
+                .forEach(s3Object -> {
+                    DeleteObjectRequest deleteObjectRequest = DeleteObjectRequest.builder()
+                            .bucket(bucketName)
+                            .key(s3Object.key())
+                            .build();
+                    s3Client.deleteObject(deleteObjectRequest);
+                    log.info("Deleted object: {}", s3Object.key());
+                });
+
+        ListObjectVersionsRequest listObjectVersionsRequest = ListObjectVersionsRequest.builder()
+                .bucket(bucketName)
+                .build();
+        s3Client.listObjectVersionsPaginator(listObjectVersionsRequest).stream()
+                .flatMap(response -> response.versions().stream())
+                .forEach(version -> {
+                    DeleteObjectRequest deleteVersionRequest = DeleteObjectRequest.builder()
+                            .bucket(bucketName)
+                            .key(version.key())
+                            .versionId(version.versionId())
+                            .build();
+                    s3Client.deleteObject(deleteVersionRequest);
+                    log.info("Deleted version: {} for object: {}", version.versionId(), version.key());
+                });
+    }
+
     public String renameBucket(String oldBucketName, String newBucketName) {
         try {
             createBucket(newBucketName);
-
-            ListObjectsRequest listObjectsRequest = ListObjectsRequest.builder()
+            log.info("Created new bucket: {}", newBucketName);
+            ListObjectsV2Request listObjectsV2Request = ListObjectsV2Request.builder()
                     .bucket(oldBucketName)
                     .build();
-
-            ListObjectsResponse listObjectsResponse = s3Client.listObjects(listObjectsRequest);
-            listObjectsResponse.contents().forEach(object -> {
-                CopyObjectRequest copyObjectRequest = CopyObjectRequest.builder()
-                        .sourceBucket(oldBucketName)
-                        .sourceKey(object.key())
-                        .destinationBucket(newBucketName)
-                        .destinationKey(object.key())
-                        .build();
-
-                s3Client.copyObject(copyObjectRequest);
-            });
-
+            s3Client.listObjectsV2Paginator(listObjectsV2Request).stream()
+                    .flatMap(response -> response.contents().stream())
+                    .forEach(object -> {
+                        try {
+                            CopyObjectRequest copyObjectRequest = CopyObjectRequest.builder()
+                                    .sourceBucket(oldBucketName)
+                                    .sourceKey(object.key())
+                                    .destinationBucket(newBucketName)
+                                    .destinationKey(object.key())
+                                    .build();
+                            s3Client.copyObject(copyObjectRequest);
+                            log.info("Copied object {} from {} to {}", object.key(), oldBucketName, newBucketName);
+                        } catch (S3Exception e) {
+                            log.error("Error copying object {} from {} to {}: {}", object.key(), oldBucketName, newBucketName, e.getMessage());
+                            throw new FileException("Failed to copy object: " + object.key(), e);
+                        }
+                    });
             deleteBucket(oldBucketName);
-
+            log.info("Deleted old bucket: {}", oldBucketName);
             return "Bucket renamed successfully from " + oldBucketName + " to " + newBucketName;
         } catch (S3Exception e) {
+            log.error("Error renaming bucket from {} to {}: {}", oldBucketName, newBucketName, e.getMessage());
             return "Error renaming bucket: " + e.getMessage();
         }
     }
@@ -106,9 +130,7 @@ public class S3Service {
 
         String fileTypeFolder = determineFolder(file.getOriginalFilename());
         String path = fileTypeFolder + "/" + file.getOriginalFilename();
-
         String uniqueId = randomUUID().toString();
-
         service.saveDocument(Document.builder()
                 .id(uniqueId)
                 .fileName(path).build());
@@ -172,7 +194,19 @@ public class S3Service {
     }
 
     public String deleteFile(String id) {
-        String fileName = service.findDocumentById(id).getFileName();
+        if (isBlank(id) || id.isEmpty()) {
+            throw new IllegalArgumentException("File ID cannot be null or empty.");
+        }
+        String fileName;
+        try {
+            fileName = service.findDocumentById(id).getFileName();
+            if (fileName == null || fileName.isEmpty()) {
+                throw new FileException("File name not found for the given ID: " + id);
+            }
+        } catch (Exception e) {
+            log.error("Error retrieving file information for ID {}", id, e);
+            throw new FileException("Failed to retrieve file details for deletion.", e);
+        }
 
         DeleteObjectRequest deleteObjectRequest = DeleteObjectRequest.builder()
                 .bucket(bucketName)
@@ -181,46 +215,35 @@ public class S3Service {
 
         try {
             s3Client.deleteObject(deleteObjectRequest);
-            service.deleteFile(id);
-
             log.info("File {} deleted successfully from bucket {}", fileName, bucketName);
+            service.deleteFile(id);
+            log.info("File record with ID {} deleted successfully from database", id);
             return fileName + " removed ...";
         } catch (Exception e) {
             log.error("Error deleting file {} from bucket {}", fileName, bucketName, e);
-            throw new FileException("File deletion failed", e);
+            throw new FileException("File deletion failed for " + fileName, e);
         }
     }
 
     public List<String> listFiles() {
-        List<String> fileNames = new ArrayList<>();
         try {
-            ListObjectsV2Request listObjectsV2Request = ListObjectsV2Request.builder()
+            ListObjectsV2Request request = ListObjectsV2Request.builder()
                     .bucket(bucketName)
                     .build();
+            ListObjectsV2Response response = s3Client.listObjectsV2(request);
 
-            ListObjectsV2Response listObjectsV2Response = s3Client.listObjectsV2(listObjectsV2Request);
+            log.debug("S3 Response: {}", response);
 
-            while (true) {
-                for (S3Object s3Object : listObjectsV2Response.contents()) {
-                    fileNames.add(s3Object.key());
-                }
-
-                if (TRUE.equals(listObjectsV2Response.isTruncated())) {
-                    listObjectsV2Request = listObjectsV2Request.toBuilder()
-                            .continuationToken(listObjectsV2Response.nextContinuationToken())
-                            .build();
-                    listObjectsV2Response = s3Client.listObjectsV2(listObjectsV2Request);
-                } else {
-                    break;
-                }
-            }
+            List<String> fileNames = response.contents().stream()
+                    .map(S3Object::key)
+                    .toList();
 
             log.info("Listed {} files in bucket {}", fileNames.size(), bucketName);
+            return fileNames;
         } catch (Exception e) {
             log.error("Error listing files in bucket {}", bucketName, e);
             throw new FileException("Failed to list files in bucket: " + bucketName, e);
         }
-
-        return fileNames;
     }
+
 }
