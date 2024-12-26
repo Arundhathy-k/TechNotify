@@ -7,6 +7,7 @@ import com.kovan.app.util.User;
 import com.kovan.entity.Document;
 import com.kovan.exception.FileException;
 import com.kovan.service.DocumentService;
+import freemarker.template.TemplateException;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.Row;
@@ -21,12 +22,11 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.*;
+import static java.util.List.of;
 import static java.util.UUID.randomUUID;
 import static com.amazonaws.util.IOUtils.toByteArray;
-import static java.util.Collections.emptyList;
 import static java.util.Objects.requireNonNull;
 import static java.util.Optional.ofNullable;
-import static java.util.stream.Stream.iterate;
 import static java.util.stream.StreamSupport.stream;
 import static org.apache.commons.lang3.StringUtils.isBlank;
 
@@ -53,7 +53,7 @@ public class S3Service {
         String fileExtension = getFileExtension(file.getOriginalFilename());
         return "xlsx".equalsIgnoreCase(fileExtension)
                 ? processExcelFile(file)
-                : List.of(processUpload(convertMultipartToFile(file)));
+                : of(processUpload(convertMultipartToFile(file)));
     }
 
     private List<String> processExcelFile(MultipartFile file) throws IOException {
@@ -73,16 +73,30 @@ public class S3Service {
 
     private String processRow(Row row) throws IOException {
         User user = User.builder()
-                .userId(getCellValue(row, 0))
-                .name(getCellValue(row, 1))
-                .email(getCellValue(row, 2))
+                .firstName(getCellValue(row, 0))
+                .lastName(getCellValue(row, 1))
+                .gender(getCellValue(row, 2))
                 .phone(getCellValue(row, 3))
-                .address(getCellValue(row, 4))
+                .primaryAddress1(getCellValue(row, 4))
+                .primaryAddress2(getCellValue(row, 5))
+                .primaryCity(getCellValue(row, 6))
+                .primaryState(getCellValue(row, 7))
+                .primaryZip(getCellValue(row, 8))
+                .secondaryAddress1(getCellValue(row, 9))
+                .secondaryAddress2(getCellValue(row, 10))
+                .secondaryCity(getCellValue(row, 11))
+                .secondaryState(getCellValue(row, 12))
+                .secondaryZip(getCellValue(row, 13))
+                .companyName(getCellValue(row, 14))
+                .companyLocation(getCellValue(row, 15))
+                .companyDesignation(getCellValue(row, 16))
+                .dateOfJoining(getCellValue(row, 17))
+                .experience(getIntCellValue(row,18))
                 .build();
 
         String html = htmlGeneratorService.generateHtml(user);
         String timestamp = new SimpleDateFormat("yyyyMMddHHmmss").format(new Date());
-        String fileName = user.getName() + "_" + timestamp + ".pdf";
+        String fileName = user.getFirstName() + "_" + timestamp + ".pdf";
         File pdfFile = pdfConverter.convertHtmlToPdf(html, fileName);
         return processUpload(pdfFile);
     }
@@ -90,6 +104,24 @@ public class S3Service {
     private String getCellValue(Row row, int cellIndex) {
         Cell cell = row.getCell(cellIndex);
         return cell != null ? cell.toString() : "";
+    }
+    private double getIntCellValue(Row row, int cellIndex) {
+        Cell cell = row.getCell(cellIndex);
+        if (cell != null) {
+            switch (cell.getCellType()) {
+                case NUMERIC:
+                    return cell.getNumericCellValue();
+                case STRING:
+                    try {
+                        return Double.parseDouble(cell.getStringCellValue());
+                    } catch (NumberFormatException e) {
+                        return 0.0;
+                    }
+                default:
+                    return 0.0;
+            }
+        }
+        return 0.0;
     }
 
     private String processUpload(File tempFile) {
@@ -186,6 +218,7 @@ public class S3Service {
             log.info("Listed {} files in bucket {}", fileNames.size(), bucketName);
         } catch (Exception e) {
             log.error("Error listing files in bucket {}", bucketName, e);
+            throw new FileException("Failed to list files in bucket: " + bucketName, e);
         }
         return fileNames;
     }
