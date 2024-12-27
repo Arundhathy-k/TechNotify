@@ -14,9 +14,10 @@ import software.amazon.awssdk.services.s3.model.*;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+
 import static io.micrometer.common.util.StringUtils.isBlank;
 import static java.util.UUID.randomUUID;
-import static java.util.stream.Stream.iterate;
 
 @Service
 @Slf4j
@@ -61,28 +62,33 @@ public class S3Service {
             return "Error deleting bucket: " + e.getMessage();
         }
     }
-
     private void deleteAllObjects(String bucketName) {
-        ListObjectsV2Request listObjectsV2Request = ListObjectsV2Request.builder()
-                .bucket(bucketName)
-                .build();
-        s3Client.listObjectsV2Paginator(listObjectsV2Request).stream()
-                .flatMap(response -> response.contents().stream())
-                .forEach(s3Object -> {
+    ListObjectsV2Request listObjectsV2Request = ListObjectsV2Request.builder()
+            .bucket(bucketName)
+            .build();
+    List<CompletableFuture<Void>> objectDeletionFutures = s3Client.listObjectsV2Paginator(listObjectsV2Request).stream()
+            .flatMap(response -> response.contents().stream())
+            .map(s3Object -> CompletableFuture.runAsync(() -> {
+                try {
                     DeleteObjectRequest deleteObjectRequest = DeleteObjectRequest.builder()
                             .bucket(bucketName)
                             .key(s3Object.key())
                             .build();
                     s3Client.deleteObject(deleteObjectRequest);
                     log.info("Deleted object: {}", s3Object.key());
-                });
+                } catch (S3Exception e) {
+                    log.error("Error deleting object {}: {}", s3Object.key(), e.getMessage());
+                }
+            }))
+            .toList();
+    ListObjectVersionsRequest listObjectVersionsRequest = ListObjectVersionsRequest.builder()
+            .bucket(bucketName)
+            .build();
 
-        ListObjectVersionsRequest listObjectVersionsRequest = ListObjectVersionsRequest.builder()
-                .bucket(bucketName)
-                .build();
-        s3Client.listObjectVersionsPaginator(listObjectVersionsRequest).stream()
-                .flatMap(response -> response.versions().stream())
-                .forEach(version -> {
+    List<CompletableFuture<Void>> versionDeletionFutures = s3Client.listObjectVersionsPaginator(listObjectVersionsRequest).stream()
+            .flatMap(response -> response.versions().stream())
+            .map(version -> CompletableFuture.runAsync(() -> {
+                try {
                     DeleteObjectRequest deleteVersionRequest = DeleteObjectRequest.builder()
                             .bucket(bucketName)
                             .key(version.key())
@@ -90,19 +96,29 @@ public class S3Service {
                             .build();
                     s3Client.deleteObject(deleteVersionRequest);
                     log.info("Deleted version: {} for object: {}", version.versionId(), version.key());
-                });
-    }
+                } catch (S3Exception e) {
+                    log.error("Error deleting version {} for object {}: {}", version.versionId(), version.key(), e.getMessage());
+                }
+            }))
+            .toList();
+    CompletableFuture.allOf(
+            CompletableFuture.allOf(objectDeletionFutures.toArray(new CompletableFuture[0])),
+            CompletableFuture.allOf(versionDeletionFutures.toArray(new CompletableFuture[0]))
+            ).join();
+    log.info("All objects and versions deleted from bucket: {}", bucketName);
+}
 
     public String renameBucket(String oldBucketName, String newBucketName) {
         try {
             createBucket(newBucketName);
             log.info("Created new bucket: {}", newBucketName);
+
             ListObjectsV2Request listObjectsV2Request = ListObjectsV2Request.builder()
                     .bucket(oldBucketName)
                     .build();
-            s3Client.listObjectsV2Paginator(listObjectsV2Request).stream()
+            List<CompletableFuture<Void>> futures = s3Client.listObjectsV2Paginator(listObjectsV2Request).stream()
                     .flatMap(response -> response.contents().stream())
-                    .forEach(object -> {
+                    .map(object -> CompletableFuture.runAsync(() -> {
                         try {
                             CopyObjectRequest copyObjectRequest = CopyObjectRequest.builder()
                                     .sourceBucket(oldBucketName)
@@ -116,16 +132,21 @@ public class S3Service {
                             log.error("Error copying object {} from {} to {}: {}", object.key(), oldBucketName, newBucketName, e.getMessage());
                             throw new FileException("Failed to copy object: " + object.key(), e);
                         }
-                    });
+                    })).toList();
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+
             deleteBucket(oldBucketName);
             log.info("Deleted old bucket: {}", oldBucketName);
+
             return "Bucket renamed successfully from " + oldBucketName + " to " + newBucketName;
         } catch (S3Exception e) {
             log.error("Error renaming bucket from {} to {}: {}", oldBucketName, newBucketName, e.getMessage());
             return "Error renaming bucket: " + e.getMessage();
+        } catch (Exception e) {
+            log.error("Unexpected error renaming bucket: {}", e.getMessage());
+            return "Unexpected error renaming bucket: " + e.getMessage();
         }
     }
-
     public String uploadFile(MultipartFile file) {
 
         String fileTypeFolder = determineFolder(file.getOriginalFilename());
@@ -194,13 +215,13 @@ public class S3Service {
     }
 
     public String deleteFile(String id) {
-        if (isBlank(id) || id.isEmpty()) {
+        if (isBlank(id)) {
             throw new IllegalArgumentException("File ID cannot be null or empty.");
         }
         String fileName;
         try {
             fileName = service.findDocumentById(id).getFileName();
-            if (fileName == null || fileName.isEmpty()) {
+            if (isBlank(fileName)) {
                 throw new FileException("File name not found for the given ID: " + id);
             }
         } catch (Exception e) {
