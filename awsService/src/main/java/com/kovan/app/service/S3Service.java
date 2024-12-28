@@ -15,7 +15,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-
 import static io.micrometer.common.util.StringUtils.isBlank;
 import static java.util.UUID.randomUUID;
 
@@ -62,7 +61,7 @@ public class S3Service {
             return "Error deleting bucket: " + e.getMessage();
         }
     }
-    private void deleteAllObjects(String bucketName) {
+    public void deleteAllObjects(String bucketName) {
     ListObjectsV2Request listObjectsV2Request = ListObjectsV2Request.builder()
             .bucket(bucketName)
             .build();
@@ -169,7 +168,7 @@ public class S3Service {
         return uniqueId;
     }
 
-    private String determineFolder(String fileName) {
+    public String determineFolder(String fileName) {
 
         String fileExtension = getFileExtension(fileName);
         return switch (fileExtension.toLowerCase()) {
