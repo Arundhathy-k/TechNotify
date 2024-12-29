@@ -304,7 +304,7 @@ class S3ServiceTest {
 
         FileException exception = assertThrows(FileException.class, () -> s3Service.downloadFile(fileId));
 
-        assertEquals("Document not found", exception.getMessage());
+        assertEquals("Failed to retrieve document metadata", exception.getMessage());
         verify(documentService).findDocumentById(fileId);
         verifyNoInteractions(s3Client);
     }
@@ -334,7 +334,7 @@ class S3ServiceTest {
 
         FileException exception = assertThrows(FileException.class, () -> s3Service.downloadFile(fileId));
 
-        assertEquals("File download failed", exception.getMessage());
+        assertEquals("File download failed due to I/O error", exception.getMessage());
         verify(documentService).findDocumentById(fileId);
         verify(s3Client).getObject((expectedRequest));
     }
@@ -347,7 +347,7 @@ class S3ServiceTest {
         String result = s3Service.deleteFile(id);
         verify(s3Client, times(1)).deleteObject(any(DeleteObjectRequest.class));
         verify(documentService, times(1)).deleteFile(id);
-        assertEquals(fileName + " removed ...", result, "Expected success message");
+        assertEquals(fileName + " removed successfully.", result, "Expected success message");
     }
 
     @Test
