@@ -13,7 +13,6 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
 import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -40,6 +39,21 @@ public class S3Service {
         this.service = service;
     }
 
+    /**
+     * Creates an Amazon S3 bucket with the specified name.
+     *
+     * @param bucketName the name of the bucket to be created.
+     *
+     * @return a message indicating the result of the bucket creation:
+     *         - "Bucket created successfully: <bucketName>" on success.
+     *         - "Error creating bucket: <errorMessage>" on failure.
+     * @throws S3Exception if an error occurs during the S3 bucket creation process,
+     *                     such as insufficient permissions or naming conflicts or AWS service errors.
+     * Logs:
+     * - INFO: Logs a success message with the bucket name if the operation succeeds.
+     * - ERROR: Logs an error message with details if the operation fails.
+     */
+
     public String createBucket(String bucketName) {
         try {
             CreateBucketRequest createBucketRequest = CreateBucketRequest.builder()
@@ -54,12 +68,33 @@ public class S3Service {
         }
     }
 
+    /**
+     * Deletes an Amazon S3 bucket and all its contents.
+     *
+     * @param bucketName the name of the bucket to be deleted.
+     *
+     * @return a message indicating the result of the bucket deletion:
+     *         - "Bucket deleted successfully: <bucketName>" on success.
+     *         - "Error deleting bucket: <errorMessage>" on failure.
+     * @throws S3Exception if:
+     *         - The specified bucket does not exist in the user's AWS account.
+     *         - The user lacks permissions to delete the bucket or its contents.
+     *         - The bucket is not empty and contains objects.
+     *         - There are network or AWS service-related issues during the operation.
+     * Logs:
+     * - INFO: Logs a success message with the bucket name if the operation succeeds.
+     * - ERROR: Logs an error message with details if the operation fails.
+     */
     public String deleteBucket(String bucketName) {
         try {
+            // Deletes all objects within the specified bucket.
+            // This ensures that the bucket is empty, as S3 buckets cannot be deleted unless empty.
             deleteAllObjects(bucketName);
+
             DeleteBucketRequest deleteBucketRequest = DeleteBucketRequest.builder()
                     .bucket(bucketName)
                     .build();
+
             s3Client.deleteBucket(deleteBucketRequest);
 
             log.info("Bucket {} deleted successfully", bucketName);
@@ -69,50 +104,91 @@ public class S3Service {
             return "Error deleting bucket: " + e.getMessage();
         }
     }
+    /**
+     * Deletes all objects and their versions from the specified S3 bucket.
+     *
+     * <p>This method performs the following tasks:</p>
+     * <ul>
+     *   <li>Retrieves all objects stored in the S3 bucket using a paginator.</li>
+     *   <li>Deletes each object asynchronously using a thread pool (executor service).</li>
+     *   <li>Retrieves all object versions (for version-enabled buckets) and deletes them asynchronously.</li>
+     *   <li>Ensures all deletions are completed before returning from the method.</li>
+     *   <li>Shuts down the executor service gracefully after completion.</li>
+     * </ul>
+     * <p>Detailed explanation:</p>
+     * CompletableFuture is used to manage and execute asynchronous tasks. In this method,
+     * each object or version deletion is wrapped in a CompletableFuture. This allows multiple deletion operations
+     * to occur concurrently without blocking the main thread, making the process faster and more efficient.
+     * <ul>
+     * <li>ListObjectsV2Request: Create a request to list all objects in the S3 bucket.
+     *    It returns a paginated list, which means we can retrieve large sets of data in smaller chunks.</li>
+     * <li>listObjectsV2Paginator: A paginator that handles the retrieval of all objects in a bucket
+     *             across multiple pages, ensuring all objects are listed, even if the result set is large.</li>
+     * <li>flatMap: Used to flatten the paginated responses. Since listObjectsV2Paginator returns a stream
+     *             of pages (each page containing a list of objects), flatMap transforms this into a stream of objects.</li>
+     * <li>map: Converts each S3 object into a CompletableFuture that deletes the object asynchronously.</li>
+     * <li>runAsync: Used to execute a task asynchronously. For each S3 object or version, a CompletableFuture is
+     * created and executed in a background thread provided by the executorService. This ensures the deletion tasks do
+     * not block the main execution flow.</li>
+     * <li>executorService: Manages the execution of asynchronous tasks. It allows for multi-threading and parallelism.</li>
+     * <li>ListObjectVersionsRequest: Used to request a list of all versions of objects in the bucket.
+     *             This is important for version-enabled buckets where objects may have multiple versions.</li>
+     * <li>CompletableFuture.allOf(): Used to wait for multiple asynchronous tasks to complete.
+     * It takes a collection of CompletableFuture instances and returns a new CompletableFuture that completes
+     * when all provided futures complete. This is important because we want to ensure all object and version
+     * deletions are finished before the method exits.</li>
+     * <li>join: Used to block the current thread until all CompletableFuture instances have completed.
+     * This ensures the method will only proceed once all deletions have been fully executed, and no tasks are
+     * left unfinished.</li>
+     *</ul>
+     * @param bucketName The name of the S3 bucket from which to delete all objects and versions.
+     * @throws FileException If any error occurs during the deletion of objects or their versions,
+     *                       or if the executor service fails to shut down properly.
+     */
+
     public void deleteAllObjects(String bucketName) {
         try {
-            ListObjectsV2Request listObjectsV2Request = ListObjectsV2Request.builder()
-                    .bucket(bucketName)
-                    .build();
+
+            ListObjectsV2Request listObjectsV2Request = ListObjectsV2Request.builder().bucket(bucketName).build();
 
             List<CompletableFuture<Void>> objectDeletionFutures = s3Client.listObjectsV2Paginator(listObjectsV2Request).stream()
                     .flatMap(response -> response.contents().stream())
                     .map(s3Object -> CompletableFuture.runAsync(() -> {
                         try {
                             DeleteObjectRequest deleteObjectRequest = DeleteObjectRequest.builder()
-                                    .bucket(bucketName)
-                                    .key(s3Object.key())
-                                    .build();
+                                    .bucket(bucketName).key(s3Object.key()).build();
+
                             s3Client.deleteObject(deleteObjectRequest);
                             log.info("Deleted object: {}", s3Object.key());
                         } catch (S3Exception e) {
                             log.error("Error deleting object {}: {}", s3Object.key(), e.getMessage());
+                            throw new FileException("Error deleting object: " + s3Object.key(), e);
                         }
-                    }, executorService)).toList();
+                    }, executorService)) // Execute each deletion task using the executor service.
+                    .toList();
 
             ListObjectVersionsRequest listObjectVersionsRequest = ListObjectVersionsRequest.builder()
-                    .bucket(bucketName)
-                    .build();
+                    .bucket(bucketName).build();
 
             List<CompletableFuture<Void>> versionDeletionFutures = s3Client.listObjectVersionsPaginator(listObjectVersionsRequest).stream()
-                    .flatMap(response -> response.versions().stream())
+                    .flatMap(response -> response.versions().stream()) // Flatten the list of versions from each page.
                     .map(version -> CompletableFuture.runAsync(() -> {
                         try {
                             DeleteObjectRequest deleteVersionRequest = DeleteObjectRequest.builder()
-                                    .bucket(bucketName)
-                                    .key(version.key())
-                                    .versionId(version.versionId())
-                                    .build();
+                                    .bucket(bucketName).key(version.key()).versionId(version.versionId()).build();
+
                             s3Client.deleteObject(deleteVersionRequest);
                             log.info("Deleted version: {} for object: {}", version.versionId(), version.key());
                         } catch (S3Exception e) {
                             log.error("Error deleting version {} for object {}: {}", version.versionId(), version.key(), e.getMessage());
+                            throw new FileException("Error deleting version: " + version.versionId() + " for object: " + version.key(), e);
                         }
                     }, executorService)).toList();
 
+            // Wait for all deletion tasks to complete before proceeding.
             CompletableFuture.allOf(
-                    CompletableFuture.allOf(objectDeletionFutures.toArray(new CompletableFuture[0])),
-                    CompletableFuture.allOf(versionDeletionFutures.toArray(new CompletableFuture[0]))).join();
+                    CompletableFuture.allOf(objectDeletionFutures.toArray(new CompletableFuture[0])), // Ensure all object deletions complete.
+                    CompletableFuture.allOf(versionDeletionFutures.toArray(new CompletableFuture[0]))).join(); // Ensure all version deletions complete.
 
             log.info("All objects and versions deleted from bucket: {}", bucketName);
 
@@ -120,7 +196,7 @@ public class S3Service {
             executorService.shutdown();
             try {
                 if (!executorService.awaitTermination(60, SECONDS)) {
-                    executorService.shutdownNow();
+                    executorService.shutdownNow(); // If tasks do not terminate within the timeout, force shutdown.
                 }
             } catch (InterruptedException e) {
                 executorService.shutdownNow();
@@ -129,36 +205,75 @@ public class S3Service {
         }
     }
 
+    /**
+     * Renames an S3 bucket by creating a new bucket, copying all objects from the old bucket to the new one,
+     * and then deleting the old bucket.
+     *
+     * <p>This method performs the following steps:</p>
+     * <ol>
+     *   <li>Creates a new bucket with the specified new name.</li>
+     *   <li>Lists all objects in the old bucket and copies each object to the new bucket asynchronously.</li>
+     *   <li>Waits for all copy operations to complete using {@code CompletableFuture.allOf()}.</li>
+     *   <li>Deletes the old bucket after all objects have been copied successfully.</li>
+     *   <li>Logs each operation, including any errors encountered during the process.</li>
+     * </ol>
+     *<p>Detailed explanation</p>
+     * ListObjectsV2Request - is used to request a list of all objects in the old bucket.The result is paginated,
+     *  allowing for retrieval of large sets of objects.
+     *  ListObjectsV2Paginator retrieves all objects from the old bucket, even if the result set is large.
+     * flatMap - Flattens the paginated responses, converting them into a stream of individual objects.
+     * map - Converts each object into a CompletableFuture that copies the object to the new bucket asynchronously.
+     * executorService - Handles the execution of asynchronous tasks in parallel, improving performance.
+     * CopyObjectRequest specifies the source (old bucket) and destination (new bucket) for each object that needs to be copied.
+     * futures.toArray(new CompletableFuture[0]) - converts the list of CompletableFuture objects into an array,
+     *    as CompletableFuture.allOf() requires an array rather than a list.
+     * Join - Used to block the current thread until all CompletableFuture instances have completed.
+     *  This ensures the method will only proceed once all deletions have been fully executed, and no tasks are
+     *  left unfinished.
+     * <p><strong>About {@code CompletableFuture}:</strong>
+     * {@code CompletableFuture} is used to perform asynchronous tasks, in this case, copying the objects from
+     * the old bucket to the new one. Each copy operation is executed asynchronously in a separate thread using
+     * {@code runAsync}, allowing the method to copy multiple objects concurrently.
+     * The {@code CompletableFuture.allOf()} method is then used to ensure that all copy operations are
+     * completed before proceeding with the deletion of the old bucket.</p>
+     *
+     * @param oldBucketName The name of the existing S3 bucket that will be renamed.
+     * @param newBucketName The name of the new S3 bucket that will be created.
+     * @return A message indicating whether the bucket renaming was successful or not.
+     *        - "Bucket renamed successfully from old-bucket-name to new-bucket-name" on success.
+     *        - "Error renaming bucket: <error-message>" on failure.
+     */
     public String renameBucket(String oldBucketName, String newBucketName) {
         try {
             createBucket(newBucketName);
             log.info("Created new bucket: {}", newBucketName);
 
-            ListObjectsV2Request listObjectsV2Request = ListObjectsV2Request.builder()
-                    .bucket(oldBucketName).build();
+            // List all objects in the old bucket.
+            ListObjectsV2Request listObjectsV2Request = ListObjectsV2Request.builder().bucket(oldBucketName).build();
 
+            // Copy all objects from the old bucket to the new bucket asynchronously.
             List<CompletableFuture<Void>> futures = s3Client.listObjectsV2Paginator(listObjectsV2Request).stream()
-                    .flatMap(response -> response.contents().stream())
+                    .flatMap(response -> response.contents().stream()) // Flatten the list of objects from all pages.
                     .map(object -> CompletableFuture.runAsync(() -> {
                         try {
                             CopyObjectRequest copyObjectRequest = CopyObjectRequest.builder()
-                                    .sourceBucket(oldBucketName)
-                                    .sourceKey(object.key())
-                                    .destinationBucket(newBucketName)
-                                    .destinationKey(object.key())
-                                    .build();
+                                    .sourceBucket(oldBucketName).sourceKey(object.key())
+                                    .destinationBucket(newBucketName).destinationKey(object.key()).build();
+
                             s3Client.copyObject(copyObjectRequest);
                             log.info("Copied object {} from {} to {}", object.key(), oldBucketName, newBucketName);
                         } catch (S3Exception e) {
                             log.error("Error copying object {} from {} to {}: {}", object.key(), oldBucketName, newBucketName, e.getMessage());
                             throw new FileException("Failed to copy object: " + object.key(), e);
                         }
-                    }, executorService)).toList();
+                    }, executorService)) // Execute the copy task asynchronously.
+                    .toList();
 
             CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
 
             deleteBucket(oldBucketName);
             log.info("Deleted old bucket: {}", oldBucketName);
+
             return "Bucket renamed successfully from " + oldBucketName + " to " + newBucketName;
         } catch (S3Exception e) {
             log.error("Error renaming bucket from {} to {}: {}", oldBucketName, newBucketName, e.getMessage());
@@ -169,7 +284,9 @@ public class S3Service {
         } finally {
             executorService.shutdown();
             try {
+                // Wait for the termination of all tasks in the executor service, allowing up to 60 seconds.
                 if (!executorService.awaitTermination(60, SECONDS)) {
+                    // If tasks haven't completed within the 60-second timeout, forcefully shutdown the executor service.
                     executorService.shutdownNow();
                 }
             } catch (InterruptedException e) {
@@ -178,30 +295,95 @@ public class S3Service {
             }
         }
     }
-    public String uploadFile(MultipartFile file) {
 
+    /**
+     * Uploads a file to an Amazon S3 bucket and stores metadata in a database.
+     *
+     * @param file the {@link MultipartFile} to be uploaded. Must not be null and must contain a valid file name.
+     * @return a unique ID representing the uploaded file.
+     *
+     * @throws FileException if the file upload to S3 fails or an unexpected error occurs.
+     * Parameters:
+     * - PutObjectRequest:
+     *   - Contains metadata about the upload, such as:
+     *     - The bucket name where the file is being uploaded.
+     *     - The key (path/name of the file in S3).
+     *     - Additional configurations like permissions or storage class (if any).
+     * - RequestBody:
+     *   - Represents the actual content of the file being uploaded.
+     *   - Created using `RequestBody.fromInputStream()` with the following:
+     *     - `file.getInputStream()`:
+     *       - Obtains an InputStream from the uploaded file (provided as a {@link MultipartFile}).
+     *       - This stream is used to read the file's binary content for upload.
+     *     - `file.getSize()`:
+     *       - Specifies the size of the file in bytes.
+     *       - Helps S3 allocate resources and validate the upload.
+     * Logs:
+     * - INFO: Logs the file name, bucket name, and key path before starting the upload.
+     * - ERROR: Logs detailed error information if the upload fails.
+
+     * Workflow:
+     * 1. Determine the folder in S3 based on the file type using {@code determineFolder()}.
+     * 2. Generate a unique ID for the file and store metadata in the database.
+     * 3. Build a {@link PutObjectRequest} to specify the bucket and key for S3 upload.
+     * 4. Upload the file to S3 using the S3 client.
+
+     * Exceptions:
+     * - S3Exception: Thrown in the following scenarios:
+     *   - The specified bucket does not exist.
+     *   - The AWS credentials lack sufficient permissions for the operation.
+     *   - Invalid key (file path) due to naming issues.
+     *   - Network or AWS service-related issues during the operation.
+     */
+    public String uploadFile(MultipartFile file) {
         String fileTypeFolder = determineFolder(file.getOriginalFilename());
         String path = fileTypeFolder + "/" + file.getOriginalFilename();
         String uniqueId = randomUUID().toString();
+
+        // Save metadata about the file to the database.
         service.saveDocument(Document.builder()
                 .id(uniqueId)
                 .fileName(path)
                 .createdDate(now().toString())
                 .updatedDate(now().toString()).build());
+
         try {
             log.info("Uploading file {} to bucket {}, key: {}", file.getOriginalFilename(), bucketName, path);
+
+            // Create a request to upload the file to S3.
             PutObjectRequest putObjectRequest = PutObjectRequest.builder()
                     .bucket(bucketName)
                     .key(path)
                     .build();
-            s3Client.putObject(putObjectRequest,RequestBody.fromInputStream(file.getInputStream(), file.getSize()));
+
+            // Upload the file to the S3 bucket.
+            s3Client.putObject(putObjectRequest, RequestBody.fromInputStream(file.getInputStream(), file.getSize()));
+        } catch (S3Exception e) {
+            log.error("Error uploading file to S3: {}", e.awsErrorDetails().errorMessage());
+            throw new FileException("S3 file upload failed: " + e.awsErrorDetails().errorMessage(), e);
         } catch (Exception e) {
-            log.error("Error uploading file to S3", e);
+            log.error("Unexpected error uploading file to S3", e);
             throw new FileException("File upload failed", e);
         }
         return uniqueId;
     }
 
+    /**
+     * Determines the folder name based on the file extension of the given file name.
+     *
+     * @param fileName the name of the file whose folder type needs to be determined.
+     *
+     * @return the folder name as a {@link String}, corresponding to the file's extension:
+     *         - "pdf" files are mapped to the "pdfs" folder.
+     *         - "doc" and "docx" files are mapped to the "docs" folder.
+     *         - "jpg", "jpeg", and "png" files are mapped to the "images" folder.
+     *         - "txt" files are mapped to the "texts" folder.
+     *         - Any other extensions are mapped to the "others" folder.
+     *
+     * @implNote This method uses the Java `switch` expression introduced in Java 14,
+     *           and it is case-insensitive as file extensions are converted to lowercase.
+     *
+     */
     public String determineFolder(String fileName) {
 
         String fileExtension = getFileExtension(fileName);
@@ -214,6 +396,28 @@ public class S3Service {
         };
     }
 
+    /**
+     * Extracts the file extension from the given file name.
+     *
+     * @param fileName the name of the file from which the extension is to be extracted.
+     *
+     * @return the file extension as a {@link String}, excluding the period `.`.
+     *
+     * @throws FileException if the file name is null, blank, or does not contain a valid extension (i.e., no period `.`).
+
+     * Example Usage:
+     * - For fileName "document.pdf", this method returns "pdf".
+     * - For fileName "image.jpeg", this method returns "jpeg".
+
+     * Detailed Example:
+     * Given the file name `"document.pdf"`:
+     * 1. `fileName.lastIndexOf('.')` returns `8`, which is the position of the last period (`.`) in `"document.pdf"`.
+     * 2. Adding `+1` to `8` results in `9`, which is the position of the first character of the extension (`p` in `"pdf"`).
+     * 3. `fileName.substring(9)` extracts the substring starting at index `9`, which gives `"pdf"`.
+     *
+     * The result of this operation is `"pdf"`, which is the file extension without the period.
+     *
+     */
     private String getFileExtension(String fileName) {
         if (isBlank(fileName) || !fileName.contains(".")) {
             throw new FileException("Invalid file name: " + fileName);
@@ -221,34 +425,63 @@ public class S3Service {
         return fileName.substring(fileName.lastIndexOf('.') + 1);
     }
 
+    /**
+     * Downloads a file from an S3 bucket based on the provided document ID.
+     *
+     * <p>Workflow:
+     * <ul>
+     *   <li>Retrieve the document associated with the given ID from the database.</li>
+     *   <li>Verify the document exists. If not, throw an exception.</li>
+     *   <li>Extract the file name from the document.</li>
+     *   <li>Create an S3 get request using the file name and bucket name.</li>
+     *   <li>Send the request to the S3 client to fetch the file as an input stream.</li>
+     *   <li>Read the input stream and write its contents into a byte array output stream.</li>
+     *   <li>Log a success message and return the byte array representing the file's content.</li>
+     * </ul>
+     *
+     * @param id the unique identifier of the file to be downloaded
+     * @return a byte array containing the file's content
+     * @throws FileException if the document is not found, the file is missing in S3,
+     *                       or if any error occurs during the download process.
+
+     * - The inputStream.read(buffer) method reads up to buffer.length (1024) bytes from the input stream,
+     *   storing the data in the buffer array and returning the number of bytes read.
+     * - If the buffer isn't fully filled (e.g., during the last read operation), bytesRead ensures only the
+     *   valid portion of the buffer is written to the output stream.
+     * - This approach efficiently handles large files by processing them in chunks instead of loading the
+     *   entire file into memory, reducing memory usage and enhancing performance.
+     */
     public byte[] downloadFile(String id) {
 
-        Document document;
-        try {
-            document = service.findDocumentById(id);
-            if (isNull(document)) {
-                log.warn("No document found with id: {}", id);
-                throw new FileException("Document with ID " + id + " not found");
-            }
-        } catch (Exception e) {
-            log.error("Error retrieving document metadata for id {}: {}", id, e.getMessage(), e);
-            throw new FileException("Failed to retrieve document metadata", e);
+        // Retrieve the document using the given ID from the database.
+        Document document = service.findDocumentById(id);
+        if (isNull(document)) {
+            log.warn("No document found with id: {}", id);
+            throw new FileException("Document with ID " + id + " not found");
         }
 
+        // Extract the file name from the retrieved document.
         String fileName = document.getFileName();
 
+        // Build a request object to fetch the file from the S3 bucket.
         GetObjectRequest getObjectRequest = GetObjectRequest.builder()
-                .bucket(bucketName)
-                .key(fileName)
-                .build();
+                .bucket(bucketName).key(fileName).build();
 
-        try (ResponseInputStream<GetObjectResponse> inputStream = s3Client.getObject(getObjectRequest);
-             ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+        try {
+            // Send the request to S3 and get the file as an input stream.
+            ResponseInputStream<GetObjectResponse> inputStream = s3Client.getObject(getObjectRequest);
+
+            // Create an output stream to store the file's contents as bytes.
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
 
             byte[] buffer = new byte[1024];
-            int bytesRead;
+
+            int bytesRead; // Declare a variable to store the number of bytes read in each iteration of the loop.
+            // Read data from the input stream into the buffer in chunks.
+            // Continue looping until the end of the input stream is reached (indicated by read() returning -1).
             while ((bytesRead = inputStream.read(buffer)) != -1) {
-                outputStream.write(buffer, 0, bytesRead);
+                // Write the data from the buffer to the output stream.
+                outputStream.write(buffer, 0, bytesRead); //buffer contains the bytes read from the inputStream, starting at index 0.
             }
 
             log.info("File with id {} (name: {}) downloaded successfully from bucket {}", id, fileName, bucketName);
@@ -263,19 +496,23 @@ public class S3Service {
                     id, fileName, bucketName, sdkEx.getMessage(), sdkEx);
             throw new FileException("AWS SDK error during file download", sdkEx);
 
-        } catch (IOException ioEx) {
-            log.error("I/O error while downloading file with id {} (name: {}) from bucket {}: {}",
-                    id, fileName, bucketName, ioEx.getMessage(), ioEx);
-            throw new FileException("File download failed due to I/O error", ioEx);
-
         } catch (Exception ex) {
             log.error("Unexpected error while downloading file with id {} (name: {}) from bucket {}: {}",
                     id, fileName, bucketName, ex.getMessage(), ex);
             throw new FileException("Unexpected error during file download", ex);
-
         }
     }
 
+    /**
+     * Deletes a file from an S3 bucket and removes its associated record from the database.
+     *
+     * @param id the unique identifier of the file to be deleted
+     * @return a message confirming the successful deletion of the file
+     *          (e.g., "example-file.txt removed successfully.")
+     * @throws IllegalArgumentException if the file ID is null or empty
+     * @throws FileException if the file is not found, the file name is blank,
+     *                       or if an error occurs during file deletion
+     */
     public String deleteFile(String id) {
 
         if (isBlank(id)) {
@@ -283,33 +520,23 @@ public class S3Service {
             throw new IllegalArgumentException("File ID cannot be null or empty.");
         }
 
-        String fileName;
-
-        try {
             var document = service.findDocumentById(id);
             if (isNull(document)) {
                 log.warn("No document found for ID: {}", id);
                 throw new FileException("No file found for the given ID: " + id);
             }
 
-            fileName = document.getFileName();
+        String fileName = document.getFileName();
             if (isBlank(fileName)) {
                 log.warn("File name is blank for document with ID: {}", id);
                 throw new FileException("File name not found for the given ID: " + id);
             }
-        } catch (Exception e) {
-            log.error("Error retrieving file information for ID: {}", id, e);
-            throw new FileException("Failed to retrieve file details for deletion.", e);
-        }
+        try{
+             DeleteObjectRequest deleteObjectRequest = DeleteObjectRequest.builder()
+                .bucket(bucketName).key(fileName).build();
 
-        DeleteObjectRequest deleteObjectRequest = DeleteObjectRequest.builder()
-                .bucket(bucketName)
-                .key(fileName)
-                .build();
-
-        try {
-            s3Client.deleteObject(deleteObjectRequest);
-            log.info("File '{}' deleted successfully from bucket '{}'", fileName, bucketName);
+             s3Client.deleteObject(deleteObjectRequest);
+             log.info("File '{}' deleted successfully from bucket '{}'", fileName, bucketName);
         } catch (SdkClientException sdkEx) {
             log.error("AWS SDK error deleting file '{}' from bucket '{}'", fileName, bucketName, sdkEx);
             throw new FileException("AWS SDK error during file deletion for " + fileName, sdkEx);
@@ -318,36 +545,53 @@ public class S3Service {
             throw new FileException("File deletion failed for " + fileName, e);
         }
 
-        try {
-            service.deleteFile(id);
-            log.info("File record with ID '{}' deleted successfully from database", id);
-        } catch (Exception e) {
-            log.error("Error deleting file record with ID '{}' from database", id, e);
-            throw new FileException("File deletion succeeded in S3 but failed in the database for ID: " + id, e);
-        }
+        service.deleteFile(id);
 
         return fileName + " removed successfully.";
     }
 
+    /**
+     * This method interacts with AWS S3 using the {@link S3Client} to retrieve the list of objects (files) in the specified bucket.
+     *
+     * @return a {@link List} of {@link String} representing the file names (keys) of all objects in the S3 bucket.
+     *
+     * @throws FileException if there are any errors encountered while listing files, such as network issues or S3 service errors.
+
+     * Example:
+     * For a bucket with the following files:
+     * - `document.pdf`
+     * - `image.jpg`
+     * - `notes.txt`
+
+     * The returned list might look like:
+     * - `["document.pdf", "image.jpg", "notes.txt"]`
+
+     * Implementation Notes:
+     * - Uses {@link ListObjectsV2Request} to request a list of objects from S3.
+     * - The {@link ListObjectsV2Response} object contains a lot of additional metadata beyond just the file names.
+     * - Hence the result is processed using a stream to extract the keys (file names) of the objects in the bucket.
+     */
     public List<String> listFiles() {
         try {
             ListObjectsV2Request request = ListObjectsV2Request.builder()
-                    .bucket(bucketName)
-                    .build();
+                    .bucket(bucketName).build();
             ListObjectsV2Response response = s3Client.listObjectsV2(request);
 
+            // This will print metadata like the number of files, next token, etc.
             log.debug("S3 Response: {}", response);
 
-            List<String> fileNames = response.contents().stream()
-                    .map(S3Object::key)
-                    .toList();
+            List<String> fileNames = response.contents().stream()  // The `contents()` method returns a list of `S3Object` objects, each representing a file in the bucket.
+                    .map(S3Object::key)  // Extracts the file name (key) from each S3Object
+                    .toList();  // Collects the file names into a list
 
             log.info("Listed {} files in bucket {}", fileNames.size(), bucketName);
             return fileNames;
-        } catch (Exception e) {
+        } catch (S3Exception e) {
             log.error("Error listing files in bucket {}", bucketName, e);
             throw new FileException("Failed to list files in bucket: " + bucketName, e);
+        } catch (Exception e) {
+            log.error("Unexpected error while listing files in bucket {}", bucketName, e);
+            throw new FileException("Unexpected error while listing files in bucket: " + bucketName, e);
         }
     }
-
 }
