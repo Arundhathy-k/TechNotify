@@ -3,7 +3,7 @@ package com.kovan.app.controller;
 import com.kovan.app.service.SqsService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 @RestController
 @RequestMapping("/sqs")
@@ -16,34 +16,33 @@ public class SqsController {
     }
 
     @PostMapping("/send")
-    public ResponseEntity<String> sendMessage(@RequestParam String message) {
-        return ResponseEntity.ok(sqsService.sendMessage(message));
-    }
-
-    @PostMapping("/sendBatchMessages")
-    public ResponseEntity<String> sendBatchMessage(@RequestParam List<String> messages) {
-        return ResponseEntity.ok( sqsService.sendBatchMessages(messages));
+    public CompletableFuture<ResponseEntity<String>> sendMessage(@RequestBody String messageBody) {
+        return sqsService.sendMessage(messageBody)
+                .thenApply(result -> ResponseEntity.ok("Message sent successfully."));
     }
 
     @GetMapping("/receive")
-    public ResponseEntity<List<String>> receiveMessages() {
-
-        return ResponseEntity.ok(sqsService.receiveMessages());
+    public CompletableFuture<ResponseEntity<?>> receiveMessages() {
+        return sqsService.receiveMessages()
+                .thenApply(ResponseEntity::ok);
     }
 
-    @PostMapping("/create/{queueName}")
-    public ResponseEntity<String> createQueue(@PathVariable String queueName) {
-        return ResponseEntity.ok( "Queue created: " + sqsService.createQueue(queueName));
+    @PostMapping("/create")
+    public CompletableFuture<ResponseEntity<String>> createQueue(@RequestParam String queueName) {
+        return sqsService.createQueue(queueName)
+                .thenApply(queueUrl -> ResponseEntity.ok("Queue created at URL: " + queueUrl));
     }
 
-    @DeleteMapping("/delete/{queueName}")
-    public ResponseEntity<String> deleteQueue(@PathVariable String queueName) {
-        return ResponseEntity.ok(sqsService.deleteQueue(queueName));
+    @DeleteMapping("/delete")
+    public CompletableFuture<ResponseEntity<String>> deleteQueue(@RequestParam String queueUrl) {
+        return sqsService.deleteQueue(queueUrl)
+                .thenApply(result -> ResponseEntity.ok("Queue deleted successfully."));
     }
 
     @GetMapping("/list")
-    public ResponseEntity<List<String>> listQueues() {
-        return ResponseEntity.ok(sqsService.listQueues());
+    public CompletableFuture<ResponseEntity<?>> listQueues() {
+        return sqsService.listQueues()
+                .thenApply(listQueuesResponse -> ResponseEntity.ok(listQueuesResponse.queueUrls()));
     }
 }
 

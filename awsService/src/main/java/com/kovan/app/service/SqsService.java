@@ -3,143 +3,114 @@ package com.kovan.app.service;
 import com.kovan.app.exception.SqsServiceException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import software.amazon.awssdk.services.sqs.SqsClient;
+import software.amazon.awssdk.services.sqs.SqsAsyncClient;
 import software.amazon.awssdk.services.sqs.model.*;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import org.springframework.beans.factory.annotation.Value;
 
 @Service
 @Slf4j
 public class SqsService {
 
-    private final SqsClient sqsClient;
-
     @Value("${aws.sqs.queue-url}")
     private String queueUrl;
 
-    public SqsService(SqsClient sqsClient) {
-        this.sqsClient = sqsClient;
+        private final SqsAsyncClient sqsAsyncClient;
+
+    public SqsService(SqsAsyncClient sqsAsyncClient) {
+        this.sqsAsyncClient = sqsAsyncClient;
     }
 
-    public String sendMessage(String message) {
-        try {
-            SendMessageRequest request = SendMessageRequest.builder()
-                    .queueUrl(queueUrl)
-                    .messageBody(message)
-                    .delaySeconds(0)
-                    .build();
-
-            log.info("Message sent to SQS: {}", message);
-            sqsClient.sendMessage(request);
-            return "Message sent to SQS: " + message;
-        } catch (SqsException e) {
-            log.error("Error sending message to SQS: {}", e.getMessage(), e);
-            throw new SqsServiceException("Failed to send message to SQS", e);
-        }
-    }
-
-    public String sendBatchMessages(List<String> messages) {
-
-        try {
-            for(String msg:messages) {
-                SendMessageBatchRequest sendMessageBatchRequest = SendMessageBatchRequest.builder().queueUrl(queueUrl)
-                        .entries(SendMessageBatchRequestEntry.builder()
-                                .id(String.valueOf(msg.hashCode())).messageBody(msg).build()).build();
-                sqsClient.sendMessageBatch(sendMessageBatchRequest);
-            }
-            return "Messages sent successfully";
-        } catch (SqsException e) {
-            log.error("Error sending batch messages to SQS: {}", e.getMessage(), e);
-            throw new SqsServiceException("Failed to send batch messages to SQS", e);
-        }
-    }
-
-    public List<String> receiveMessages() {
-        try {
-            ReceiveMessageRequest request = ReceiveMessageRequest.builder()
-                    .queueUrl(queueUrl)
-                    .maxNumberOfMessages(10)
-                    .waitTimeSeconds(10)
-                    .build();
-            List<Message> messages = sqsClient.receiveMessage(request).messages();
-            List<String> messageBodies = messages.stream()
-                    .map(Message::body).toList();
-
-            log.info("Received messages: {}", messageBodies);
-
-            deleteMessage(messages);
-
-            return messageBodies;
-
-        } catch (SqsException e) {
-            log.error("Error receiving messages from SQS: {}", e.getMessage(), e);
-            throw new SqsServiceException("Failed to receive messages from SQS", e);
-        }
-    }
-
-    public void deleteMessage(List<Message> messages) {
-        try {
-            for (Message message : messages) {
-                DeleteMessageRequest deleteMessageRequest = DeleteMessageRequest.builder()
+    public CompletableFuture<Void> sendMessage(String messageBody) {
+            try {
+                SendMessageRequest sendMessageRequest = SendMessageRequest.builder()
                         .queueUrl(queueUrl)
-                        .receiptHandle(message.receiptHandle())
+                        .messageBody(messageBody)
                         .build();
-                sqsClient.deleteMessage(deleteMessageRequest);
-                log.info("Message deleted from SQS.");
+
+                return sqsAsyncClient.sendMessage(sendMessageRequest)
+                        .thenAccept(response -> log.info("Message sent successfully. Message ID: {}", response.messageId()));
+            } catch (Exception e) {
+                throw new SqsServiceException("Failed to send message", e);
             }
-        }catch (SqsException e) {
-            log.error("Error deleting message from SQS: {}", e.getMessage(), e);
-            throw new SqsServiceException("Failed to delete message from SQS", e);
+        }
+
+        public CompletableFuture<List<Message>> receiveMessages() {
+            try {
+                ReceiveMessageRequest receiveMessageRequest = ReceiveMessageRequest.builder()
+                        .queueUrl(queueUrl)
+                        .maxNumberOfMessages(10)
+                        .build();
+
+                return sqsAsyncClient.receiveMessage(receiveMessageRequest)
+                        .thenCompose(response -> {
+                            List<Message> messages = response.messages();
+                            log.info("Received {} messages.", messages.size());
+
+                            List<CompletableFuture<Void>> deleteFutures = messages.stream()
+                                    .map(message -> deleteMessage(message.receiptHandle()))
+                                    .toList();
+
+                            return CompletableFuture.allOf(deleteFutures.toArray(new CompletableFuture[0]))
+                                    .thenApply(aVoid -> messages);
+                        });
+            } catch (Exception e) {
+                throw new SqsServiceException("Failed to receive and delete messages", e);
+            }
+        }
+        private CompletableFuture<Void> deleteMessage(String receiptHandle) {
+              try {
+              DeleteMessageRequest deleteMessageRequest = DeleteMessageRequest.builder()
+                    .queueUrl(queueUrl)
+                    .receiptHandle(receiptHandle)
+                    .build();
+
+              return sqsAsyncClient.deleteMessage(deleteMessageRequest)
+                    .thenRun(() -> log.info("Message deleted successfully. Receipt Handle: {}", receiptHandle));
+              } catch (Exception e) {
+                  throw new SqsServiceException("Failed to delete message", e);
         }
     }
 
-    public String createQueue(String queueName) {
-        try {
-            CreateQueueRequest request = CreateQueueRequest.builder()
-                    .queueName(queueName)
-                    .build();
+        public CompletableFuture<String> createQueue(String queueName) {
+            try {
+                CreateQueueRequest createQueueRequest = CreateQueueRequest.builder()
+                        .queueName(queueName)
+                        .build();
 
-            CreateQueueResponse response = sqsClient.createQueue(request);
-            String createdQueueUrl = response.queueUrl();
-            log.info("Queue created: {}", createdQueueUrl);
-            return createdQueueUrl;
-        } catch (SqsException e) {
-            log.error("Error creating queue: {}", e.getMessage(), e);
-            throw new SqsServiceException("Failed to create queue", e);
+                return sqsAsyncClient.createQueue(createQueueRequest)
+                        .thenApply(response -> {
+                            log.info("Queue created successfully. Queue URL: {}", response.queueUrl());
+                            return response.queueUrl();
+                        });
+            } catch (Exception e) {
+                throw new SqsServiceException("Failed to create queue", e);
+            }
         }
-    }
 
-    public String deleteQueue(String queueName) {
-        try {
-            GetQueueUrlRequest getQueueRequest = GetQueueUrlRequest.builder()
-                    .queueName(queueName)
-                    .build();
+        public CompletableFuture<Void> deleteQueue(String queueUrl) {
+            try {
+                DeleteQueueRequest deleteQueueRequest = DeleteQueueRequest.builder()
+                        .queueUrl(queueUrl)
+                        .build();
 
-            String qUrl = sqsClient.getQueueUrl(getQueueRequest).queueUrl();
-            DeleteQueueRequest request = DeleteQueueRequest.builder()
-                    .queueUrl(qUrl)
-                    .build();
-
-            sqsClient.deleteQueue(request);
-            log.info("Queue deleted: {}", qUrl);
-            return "Queue deleted: "+ qUrl;
-        } catch (SqsException e) {
-            log.error("Error deleting queue: {}", e.getMessage(), e);
-            throw new SqsServiceException("Failed to delete queue", e);
+                return sqsAsyncClient.deleteQueue(deleteQueueRequest)
+                        .thenRun(() -> log.info("Queue deleted successfully: {}", queueUrl));
+            } catch (Exception e) {
+                throw new SqsServiceException("Failed to delete queue", e);
+            }
         }
-    }
 
-    public List<String> listQueues() {
-        try {
-            ListQueuesRequest request = ListQueuesRequest.builder().build();
-            ListQueuesResponse response = sqsClient.listQueues(request);
-
-            List<String> queueUrls = response.queueUrls();
-            log.info("Queues listed: {}", queueUrls);
-            return queueUrls;
-        } catch (SqsException e) {
-            log.error("Error listing queues: {}", e.getMessage(), e);
-            throw new SqsServiceException("Failed to list queues", e);
-        }
+        public CompletableFuture<ListQueuesResponse> listQueues() {
+            try {
+                return sqsAsyncClient.listQueues()
+                        .thenApply(response -> {
+                            log.info("Retrieved {} queues.", response.queueUrls().size());
+                            return response;
+                        });
+            } catch (Exception e) {
+                throw new SqsServiceException("Failed to list queues", e);
+            }
     }
 }
