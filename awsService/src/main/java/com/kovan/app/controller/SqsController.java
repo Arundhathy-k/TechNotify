@@ -24,7 +24,7 @@ public class SqsController {
     @GetMapping("/receive")
     public CompletableFuture<ResponseEntity<?>> receiveMessages() {
         return sqsService.receiveMessages()
-                .thenApply(ResponseEntity::ok);
+                .thenApply(result -> ResponseEntity.ok("Message received successfully."));
     }
 
     @PostMapping("/create")
