@@ -9,21 +9,17 @@
             padding: 20px;
             color: #333;
         }
-
         h1 {
             text-align: center;
             color: #444;
         }
-
         label {
             display: block;
             margin: 5px;
         }
-
         input[type="radio"], input[type="checkbox"] {
             margin-right: 5px;
         }
-
         .secondary-address {
             display: none;
             margin-top: 5px;
@@ -31,7 +27,6 @@
         .secondary-address.visible {
             display: block;
         }
-
         p {
             text-align: center;
             margin-top: 10px;
@@ -48,22 +43,19 @@
     <h1><u>User Details</u></h1>
     <form>
         <div class="form-section">
-            <label>First Name: ${firstName}</label>
-            <label>Last Name: ${lastName}</label>
-            <label>Gender:
-                <input type="radio" name="gender" value="Male" <#if gender == "Male">checked</#if>> Male
-                <input type="radio" name="gender" value="Female" <#if gender == "Female">checked</#if>> Female
+           <pre><label>First Name  : ${firstName}   Last Name   : ${lastName}</label></pre>
+           <pre><label>Gender      : <input type="radio" name="gender" value="Male" <#if gender == "Male">checked</#if>> Male  <input type="radio" name="gender" value="Female" <#if gender == "Female">checked</#if>> Female</pre>
             </label>
-            <label>Phone Number: ${phone}</label>
+           <pre><label>Phone Number: ${phone}</label></pre>
         </div>
 
         <div class="form-section">
             <h3>Primary Address</h3>
-            <label>Address 1: ${primaryAddress1}</label>
-            <label>Address 2: ${primaryAddress2}</label>
-            <label>City: ${primaryCity}</label>
-            <label>State: ${primaryState}</label>
-            <label>Zipcode: ${primaryZip}</label>
+            <pre><label>Address 1: ${primaryAddress1}</label></pre>
+            <pre><label>Address 2: ${primaryAddress2}</label></pre>
+            <pre><label>City     : ${primaryCity}</label></pre>
+            <pre><label>State    : ${primaryState}</label></pre>
+            <pre><label>Zipcode  : ${primaryZip}</label></pre>
         </div>
 
         <div class="form-section">
@@ -73,21 +65,21 @@
                 Enable Secondary Address
             </label>
             <div class="secondary-address <#if secondaryAddress1?has_content>visible</#if>">
-                <label>Address 1: ${secondaryAddress1}</label>
-                <label>Address 2: ${secondaryAddress2}</label>
-                <label>City: ${secondaryCity}</label>
-                <label>State: ${secondaryState}</label>
-                <label>Zipcode: ${secondaryZip}</label>
+              <pre><label>Address 1: ${secondaryAddress1}</label></pre>
+              <pre><label>Address 2: ${secondaryAddress2}</label></pre>
+              <pre><label>City     : ${secondaryCity}</label></pre>
+              <pre><label>State    : ${secondaryState}</label></pre>
+              <pre><label>Zipcode  : ${secondaryZip}</label></pre>
             </div>
         </div>
 
         <div class="form-section">
             <h3>Company Details</h3>
-            <label>Company Name: ${companyName}</label>
-            <label>Location: ${companyLocation}</label>
-            <label>Designation: ${companyDesignation}</label>
-            <label>Date of Joining: ${dateOfJoining}</label>
-            <label>Experience: ${experience} years</label>
+          <pre><label>Company Name   : ${companyName}</label></pre>
+          <pre><label>Location       : ${companyLocation}</label></pre>
+          <pre><label>Designation    : ${companyDesignation}</label></pre>
+          <pre><label>Date of Joining: ${dateOfJoining}</label></pre>
+          <pre><label>Experience     : ${experience} years</label></pre>
         </div>
 
         <div class="form-section">
@@ -103,4 +95,3 @@
     </p>
 </body>
 </html>
-
