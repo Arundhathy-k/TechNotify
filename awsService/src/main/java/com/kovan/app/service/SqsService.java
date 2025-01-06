@@ -16,7 +16,7 @@ public class SqsService {
     @Value("${aws.sqs.queue-url}")
     private String queueUrl;
 
-        private final SqsAsyncClient sqsAsyncClient;
+    private final SqsAsyncClient sqsAsyncClient;
 
     public SqsService(SqsAsyncClient sqsAsyncClient) {
         this.sqsAsyncClient = sqsAsyncClient;
