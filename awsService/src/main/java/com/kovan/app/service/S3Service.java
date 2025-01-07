@@ -4,6 +4,7 @@ import com.kovan.entity.Document;
 import com.kovan.app.exception.FileException;
 import com.kovan.service.DocumentService;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.tomcat.jni.FileInfo;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -15,6 +16,7 @@ import software.amazon.awssdk.services.s3.model.*;
 import java.io.ByteArrayOutputStream;
 import java.io.FileNotFoundException;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import static io.micrometer.common.util.StringUtils.isBlank;
@@ -22,6 +24,7 @@ import static java.time.Instant.now;
 import static java.util.Objects.isNull;
 import static java.util.UUID.randomUUID;
 import static java.util.concurrent.Executors.newFixedThreadPool;
+import static java.util.stream.Collectors.toMap;
 
 @Service
 @Slf4j
@@ -589,41 +592,56 @@ public class S3Service {
     }
 
     /**
-     * This method interacts with AWS S3 using the {@link S3Client} to retrieve the list of objects (files) in the specified bucket.
+     * This method interacts with AWS S3 using the {@link S3Client} to retrieve the list of objects (files)
+     * in the specified bucket and fetches their corresponding IDs from the database.
      *
-     * @return a {@link List} of {@link String} representing the file names (keys) of all objects in the S3 bucket.
+     * @return a {@link List} of {@link String} where each entry represents a file name and its associated ID
+     * in the format "fileName:id". If an ID is not found for a file, the value will be null.
      *
-     * @throws FileException if there are any errors encountered while listing files, such as network issues or S3 service errors.
-
+     * @throws FileException if any error occurs while listing files, such as network issues,
+     * S3 service errors, or database access problems.
      * Example:
      * For a bucket with the following files:
      * - `document.pdf`
      * - `image.jpg`
      * - `notes.txt`
-
+     * And corresponding database entries:
+     * - `document.pdf` → `ID123`
+     * - `image.jpg` → `ID456`
+     * - `notes.txt` → Not found
      * The returned list might look like:
-     * - `["document.pdf", "image.jpg", "notes.txt"]`
-
+     * - `["document.pdf:ID123", "image.jpg:ID456", "notes.txt:null"]`
      * Implementation Notes:
      * - Uses {@link ListObjectsV2Request} to request a list of objects from S3.
-     * - The {@link ListObjectsV2Response} object contains a lot of additional metadata beyond just the file names.
-     * - Hence the result is processed using a stream to extract the keys (file names) of the objects in the bucket.
+     * - Extracts the file names (keys) of the objects in the bucket using a stream.
+     * - Maps each file name to its corresponding ID retrieved using the database service.
+     * - The result is a list of strings combining file names and IDs.
      */
+
     public List<String> listFiles() {
         try {
+            // Fetch the list of objects from the S3 bucket
             ListObjectsV2Request request = ListObjectsV2Request.builder()
                     .bucket(bucketName).build();
             ListObjectsV2Response response = s3Client.listObjectsV2(request);
 
-            // This will print metadata like the number of files, next token, etc.
             log.debug("S3 Response: {}", response);
 
-            List<String> fileNames = response.contents().stream()  // The `contents()` method returns a list of `S3Object` objects, each representing a file in the bucket.
-                    .map(S3Object::key)  // Extracts the file name (key) from each S3Object
-                    .toList();  // Collects the file names into a list
+            // Extract the file names from the S3 response
+            List<String> fileNames = response.contents().stream()
+                    .map(S3Object::key)
+                    .toList();
 
-            log.info("Listed {} files in bucket {}", fileNames.size(), bucketName);
-            return fileNames;
+            // Create a list of strings in the format "fileName:id"
+            List<String> fileInfoList = fileNames.stream()
+                    .map(fileName -> {
+                        String fileId = service.findIdByFileName(fileName); // Fetch ID
+                        return fileName + ":" + fileId;
+                    })
+                    .toList();
+
+            log.info("Listed {} files with IDs in bucket {}", fileInfoList.size(), bucketName);
+            return fileInfoList;
         } catch (S3Exception e) {
             log.error("Error listing files in bucket {}", bucketName, e);
             throw new FileException("Failed to list files in bucket: " + bucketName, e);
