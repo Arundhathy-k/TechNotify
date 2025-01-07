@@ -1,7 +1,7 @@
 package com.kovan.app.service;
 
 import com.kovan.entity.Document;
-import com.kovan.exception.FileException;
+import com.kovan.app.exception.FileException;
 import com.kovan.service.DocumentService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -13,6 +13,7 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
 import java.io.ByteArrayOutputStream;
+import java.io.FileNotFoundException;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -21,7 +22,6 @@ import static java.time.Instant.now;
 import static java.util.Objects.isNull;
 import static java.util.UUID.randomUUID;
 import static java.util.concurrent.Executors.newFixedThreadPool;
-import static java.util.concurrent.TimeUnit.SECONDS;
 
 @Service
 @Slf4j
@@ -194,14 +194,6 @@ public class S3Service {
 
         } finally {
             executorService.shutdown();
-            try {
-                if (!executorService.awaitTermination(60, SECONDS)) {
-                    executorService.shutdownNow(); // If tasks do not terminate within the timeout, force shutdown.
-                }
-            } catch (InterruptedException e) {
-                executorService.shutdownNow();
-                Thread.currentThread().interrupt();
-            }
         }
     }
 
@@ -283,16 +275,6 @@ public class S3Service {
             return "Unexpected error renaming bucket: " + e.getMessage();
         } finally {
             executorService.shutdown();
-            try {
-                // Wait for the termination of all tasks in the executor service, allowing up to 60 seconds.
-                if (!executorService.awaitTermination(60, SECONDS)) {
-                    // If tasks haven't completed within the 60-second timeout, forcefully shutdown the executor service.
-                    executorService.shutdownNow();
-                }
-            } catch (InterruptedException e) {
-                executorService.shutdownNow();
-                Thread.currentThread().interrupt();
-            }
         }
     }
 
@@ -366,6 +348,62 @@ public class S3Service {
             throw new FileException("File upload failed", e);
         }
         return uniqueId;
+    }
+
+    /**
+     * Updates an existing file in the S3 bucket and its metadata in the database.
+
+     * This method replaces the existing file with a new one. It first retrieves
+     * the metadata of the current file from the database. The old file is then
+     * removed from the S3 bucket, and the new file is uploaded to a new location.
+     * The metadata in the database is updated to reflect the new file path and
+     * the updated timestamp.
+     *
+     * @param fileId the ID of the file to be updated
+     * @param newFile the new file to replace the existing one
+     * @return the ID of the updated file
+     * @throws FileException if there is an error during the update process
+     */
+    public String updateFile(String fileId, MultipartFile newFile) {
+        // Fetch the existing document metadata from the database.
+        Document existingDocument = service.findDocumentById(fileId);
+
+        String oldPath = existingDocument.getFileName();
+        String newPath = determineFolder(newFile.getOriginalFilename()) + "/" + newFile.getOriginalFilename();
+
+        try {
+            log.info("Updating file {} in bucket {}, old key: {}, new key: {}",
+                    newFile.getOriginalFilename(), bucketName, oldPath, newPath);
+
+            // Remove the old file from the S3 bucket.
+            s3Client.deleteObject(DeleteObjectRequest.builder()
+                    .bucket(bucketName)
+                    .key(oldPath)
+                    .build());
+
+            // Upload the new file to the S3 bucket.
+            PutObjectRequest putObjectRequest = PutObjectRequest.builder()
+                    .bucket(bucketName)
+                    .key(newPath)
+                    .build();
+
+            s3Client.putObject(putObjectRequest, RequestBody.fromInputStream(newFile.getInputStream(), newFile.getSize()));
+
+            // Update metadata in the database.
+            existingDocument.setFileName(newPath);
+            existingDocument.setUpdatedDate(now().toString());
+            service.updateDocument(existingDocument);
+
+            log.info("File updated successfully. ID: {}", fileId);
+        } catch (S3Exception e) {
+            log.error("Error updating file in S3: {}", e.awsErrorDetails().errorMessage());
+            throw new FileException("S3 file update failed: " + e.awsErrorDetails().errorMessage(), e);
+        } catch (Exception e) {
+            log.error("Unexpected error updating file in S3", e);
+            throw new FileException("File update failed", e);
+        }
+
+        return fileId;
     }
 
     /**
@@ -451,7 +489,7 @@ public class S3Service {
      * - This approach efficiently handles large files by processing them in chunks instead of loading the
      *   entire file into memory, reducing memory usage and enhancing performance.
      */
-    public byte[] downloadFile(String id) {
+    public byte[] downloadFile(String id){
 
         // Retrieve the document using the given ID from the database.
         Document document = service.findDocumentById(id);
@@ -513,7 +551,7 @@ public class S3Service {
      * @throws FileException if the file is not found, the file name is blank,
      *                       or if an error occurs during file deletion
      */
-    public String deleteFile(String id) {
+    public String deleteFile(String id){
 
         if (isBlank(id)) {
             log.warn("File ID is null or empty");

@@ -34,4 +34,14 @@ public class DocumentService {
     public void deleteFile(String id){
         documentRepository.deleteById(id);
     }
+
+    public void updateDocument(Document updatedDocument) {
+        Document existingDocument = documentRepository.findById(updatedDocument.getId())
+                .orElseThrow(() -> new RuntimeException("Data not found for id: " + updatedDocument.getId()));
+
+        existingDocument.setFileName(updatedDocument.getFileName());
+        existingDocument.setUpdatedDate(updatedDocument.getUpdatedDate());
+
+         documentRepository.save(existingDocument);
+    }
 }

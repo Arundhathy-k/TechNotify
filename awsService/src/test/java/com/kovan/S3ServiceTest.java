@@ -2,7 +2,7 @@ package com.kovan;
 
 import com.kovan.app.service.S3Service;
 import com.kovan.entity.Document;
-import com.kovan.exception.FileException;
+import com.kovan.app.exception.FileException;
 import com.kovan.service.DocumentService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
