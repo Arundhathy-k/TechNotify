@@ -1,7 +1,6 @@
 package com.kovan.app.service;
 
 import com.kovan.app.exception.SnsServiceException;
-import com.kovan.app.exception.SqsServiceException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
