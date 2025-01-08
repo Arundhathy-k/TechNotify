@@ -1,7 +1,7 @@
 package com.kovan.app.service;
 
 import com.kovan.app.util.User;
-import com.kovan.exception.FileException;
+import com.kovan.app.exception.FileException;
 import freemarker.template.Configuration;
 import freemarker.template.Template;
 import freemarker.template.TemplateException;
