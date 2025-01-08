@@ -28,8 +28,9 @@
 		<module>notificationService</module>
 		<module>mysql-dao</module>
 		<module>mongo-dao</module>
+        <module>awsService</module>
 
-	</modules>
+    </modules>
 	<scm>
 		<connection/>
 		<developerConnection/>

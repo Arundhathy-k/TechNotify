@@ -1,32 +1,30 @@
 package com.kovan.entity;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
-import java.time.Instant;
-
 
 @Data
 @Builder
 @Entity
 @AllArgsConstructor
 @NoArgsConstructor
-@Table(name = "content")
-public class TestEntity {
+public class Document {
 
     @Id
     private String id;
     private String fileName;
 
     @CreatedDate
-    private Instant createdDate;
+    private String createdDate;
 
     @LastModifiedDate
-    private Instant updatedDate;
+    private String updatedDate;
 
     @Builder.Default
     private String createdBy = "Arundhathy";

@@ -1,0 +1,51 @@
+package com.kovan.service;
+
+import com.kovan.entity.Document;
+import com.kovan.repository.DocumentRepository;
+import org.springframework.stereotype.Service;
+import java.util.List;
+import java.util.Optional;
+
+@Service
+public class DocumentService {
+
+    private final DocumentRepository documentRepository;
+
+    public DocumentService(DocumentRepository documentRepository) {
+        this.documentRepository = documentRepository;
+    }
+
+    public String saveDocument(Document document) {
+
+        documentRepository.save(document);
+        return document.getId();
+    }
+
+    public List<Document> getAllDocumentsFromDb() {
+        return documentRepository.findAll();
+    }
+
+    public Optional<Document> findByFileName(String fileName) {
+        return documentRepository.findByFileName(fileName);
+    }
+    public Document findDocumentById(String id){
+        return documentRepository.findById(id).orElseThrow(() -> new RuntimeException("Data not found for id: " + id));
+    }
+    public String findIdByFileName(String fileName){
+      Document document = findByFileName(fileName).orElseThrow(() -> new RuntimeException("Data not found"));
+      return document.getId();
+    }
+    public void deleteFile(String id){
+        documentRepository.deleteById(id);
+    }
+
+    public void updateDocument(Document updatedDocument) {
+        Document existingDocument = documentRepository.findById(updatedDocument.getId())
+                .orElseThrow(() -> new RuntimeException("Data not found for id: " + updatedDocument.getId()));
+
+        existingDocument.setFileName(updatedDocument.getFileName());
+        existingDocument.setUpdatedDate(updatedDocument.getUpdatedDate());
+
+         documentRepository.save(existingDocument);
+    }
+}
