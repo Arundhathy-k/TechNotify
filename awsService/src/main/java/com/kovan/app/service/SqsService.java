@@ -23,42 +23,29 @@ public class SqsService {
     }
 
     public CompletableFuture<Void> sendMessage(String messageBody) {
-            try {
-                SendMessageRequest sendMessageRequest = SendMessageRequest.builder()
-                        .queueUrl(queueUrl)
-                        .messageBody(messageBody)
-                        .build();
-
-                return sqsAsyncClient.sendMessage(sendMessageRequest)
-                        .thenAccept(response -> log.info("Message sent successfully. Message ID: {}", response.messageId()));
-            } catch (SqsException e) {
-                throw new SqsServiceException("Failed to send message", e);
-            }
-        }
-
-    public CompletableFuture<List<Message>> receiveMessages() {
         try {
-            ReceiveMessageRequest receiveMessageRequest = ReceiveMessageRequest.builder()
+            SendMessageRequest sendMessageRequest = SendMessageRequest.builder()
                     .queueUrl(queueUrl)
-                    .maxNumberOfMessages(10)
+                    .messageBody(messageBody)
                     .build();
 
-            return sqsAsyncClient.receiveMessage(receiveMessageRequest)
-                    .thenCompose(response -> {
-                        List<Message> messages = response.messages();
-                        log.info("Received {} messages.", messages.size());
+            return sqsAsyncClient.sendMessage(sendMessageRequest)
+                    .thenAccept(response -> log.info("Message sent successfully. Message ID: {}", response.messageId()))
+                    .thenCompose(result -> {
+                        ReceiveMessageRequest receiveMessageRequest = ReceiveMessageRequest.builder()
+                                .queueUrl(queueUrl)
+                                .maxNumberOfMessages(10)
+                                .build();
 
-                        messages.forEach(message -> log.info("Message: {}", message.body()));
-
-                        List<CompletableFuture<Void>> deleteFutures = messages.stream()
-                                .map(message -> deleteMessage(message.receiptHandle()))
-                                .toList();
-
-                        return CompletableFuture.allOf(deleteFutures.toArray(new CompletableFuture[0]))
-                                .thenApply(aVoid -> messages);
+                        return sqsAsyncClient.receiveMessage(receiveMessageRequest)
+                                .thenAccept(receiveResponse -> {
+                                    List<Message> messages = receiveResponse.messages();
+                                    log.info("Received {} messages.", messages.size());
+                                    messages.forEach(message -> log.info("Message body: {}", message.body()));
+                                });
                     });
         } catch (SqsException e) {
-            throw new SqsServiceException("Failed to receive and delete messages", e);
+            throw new SqsServiceException("Failed to send and retrieve messages", e);
         }
     }
 
