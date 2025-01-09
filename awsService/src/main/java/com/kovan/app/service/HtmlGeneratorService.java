@@ -8,56 +8,93 @@ import freemarker.template.TemplateException;
 import org.springframework.stereotype.Service;
 import java.io.StringWriter;
 import java.io.IOException;
-import java.util.HashMap;
+import java.lang.reflect.Field;
+import java.util.List;
 import java.util.Map;
+import static java.util.Arrays.stream;
+import static java.util.Objects.nonNull;
+import static java.util.stream.Collectors.toMap;
 
 @Service
 public class HtmlGeneratorService {
 
     private final Configuration freemarkerConfig;
+    private final List<Field> userFields;
 
     public HtmlGeneratorService(Configuration freemarkerConfig) {
         this.freemarkerConfig = freemarkerConfig;
+        this.userFields = initializeUserFields();
     }
 
-    public String generateHtml(User user){
-
-        Map<String, Object> data = new HashMap<>();
-        data.put("firstName", user.getFirstName());
-        data.put("lastName", user.getLastName());
-        data.put("gender", user.getGender());
-        data.put("phone", user.getPhone());
-
-        data.put("primaryAddress1", user.getPrimaryAddress1());
-        data.put("primaryAddress2", user.getPrimaryAddress2());
-        data.put("primaryCity", user.getPrimaryCity());
-        data.put("primaryState", user.getPrimaryState());
-        data.put("primaryZip", user.getPrimaryZip());
-
-        data.put("secondaryAddress1", user.getSecondaryAddress1());
-        data.put("secondaryAddress2", user.getSecondaryAddress2());
-        data.put("secondaryCity", user.getSecondaryCity());
-        data.put("secondaryState", user.getSecondaryState());
-        data.put("secondaryZip", user.getSecondaryZip());
-
-        data.put("companyName", user.getCompanyName());
-        data.put("companyLocation", user.getCompanyLocation());
-        data.put("companyDesignation", user.getCompanyDesignation());
-        data.put("dateOfJoining", user.getDateOfJoining());
-        data.put("experience", user.getExperience());
-
-        Template template = null;
+    /**
+     * Dynamically generate HTML for the given user object synchronously.
+     *
+     * @param user the user object
+     * @return the generated HTML string
+     */
+    public String generateHtml(User user) {
         try {
-            template = freemarkerConfig.getTemplate("userTemplate.ftl");
+            // Extract fields and load the template
+            Map<String, Object> data = extractFields(user);
+            Template template = freemarkerConfig.getTemplate("userTemplate.ftl");
+
+            // Process the template with the extracted data
+            return processTemplate(template, data);
         } catch (IOException e) {
             throw new FileException("Error loading FreeMarker template: userTemplate.ftl", e);
+        } catch (Exception e) {
+            throw new FileException("Error generating HTML", e);
         }
+    }
 
+    /**
+     * Extracts fields from the given user object and populates a map.
+     *
+     * @param user the object to extract fields from
+     * @return a map of field names and non-null values
+     */
+    private Map<String, Object> extractFields(User user) {
+        return userFields.stream()
+                .filter(field -> {
+                    try {
+                        return nonNull(field.get(user)); // Include only non-null fields
+                    } catch (IllegalAccessException e) {
+                        throw new FileException("Error accessing field: " + field.getName(), e);
+                    }
+                })
+                .collect(toMap(Field::getName, field -> {
+                    try {
+                        return field.get(user);
+                    } catch (IllegalAccessException e) {
+                        throw new FileException("Error accessing field value: " + field.getName(), e);
+                    }
+                }));
+    }
+
+    /**
+     * Processes the FreeMarker template with the provided data map.
+     *
+     * @param template the FreeMarker template
+     * @param data the data map for the template
+     * @return the processed template as a string
+     */
+    private String processTemplate(Template template, Map<String, Object> data) {
         try (StringWriter writer = new StringWriter()) {
             template.process(data, writer);
             return writer.toString();
         } catch (IOException | TemplateException e) {
             throw new FileException("Error processing FreeMarker template", e);
         }
+    }
+
+    /**
+     * Initializes the list of fields for the User class.
+     *
+     * @return a list of accessible fields in the User class
+     */
+    private List<Field> initializeUserFields() {
+        return stream(User.class.getDeclaredFields())
+                .peek(field -> field.setAccessible(true)) // Enable access to private fields
+                .toList();
     }
 }

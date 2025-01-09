@@ -19,10 +19,8 @@ import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
-
 import java.io.*;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -34,7 +32,6 @@ import static java.util.Objects.isNull;
 import static java.util.Objects.requireNonNull;
 import static java.util.UUID.randomUUID;
 import static java.util.concurrent.Executors.newFixedThreadPool;
-import static java.util.stream.Collectors.toList;
 import static java.util.stream.StreamSupport.stream;
 
 @Service
@@ -344,20 +341,21 @@ public class S3Service {
     private List<String> processExcelFile(MultipartFile file) {
         try (Workbook workbook = new XSSFWorkbook(file.getInputStream())) {
             Sheet sheet = workbook.getSheetAt(0);
-            List<CompletableFuture<String>> futures = new ArrayList<>();
-            for (int i = 1; i < sheet.getPhysicalNumberOfRows(); i++) { // Skip header row
-                Row row = sheet.getRow(i);
-                // Combine row processing and PDF generation into a single async task
-                futures.add(CompletableFuture.supplyAsync(() -> processRowAndGeneratePdf(row), cpuExecutor));
-            }
-            // Wait for all row processing to finish synchronously and return the results
+            List<CompletableFuture<String>> futures = stream(sheet.spliterator(), true)
+                    .skip(1) // Skip header row
+                    .map(row -> CompletableFuture.supplyAsync(() ->
+                            processRowAndGeneratePdf(row), cpuExecutor))
+                    .toList();
+
+            // Wait for all futures to complete and collect the results
             return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                    .thenApply(v -> futures.stream()
+                    .thenApply(response -> futures.stream()
                             .map(CompletableFuture::join)
-                            .toList())  // Collect the results into a list
-                    .join();  // Block and return the result
-        } catch (IOException e) {
-            throw new FileException("Processing Excel file failed", e);
+                            .toList()) // Collect the results into a list
+                    .join(); // Block and return the result
+        }
+        catch (IOException e) {
+            throw new FileException("Error processing file", e);
         }
     }
 
@@ -403,9 +401,10 @@ public class S3Service {
 
         String html = htmlGeneratorService.generateHtml(user);
         String timestamp = new SimpleDateFormat("yyyyMMddHHmmss").format(new Date());
-        String fileName = user.getFirstName() + "_" + timestamp + ".pdf";
+        StringBuilder fileNameBuilder = new StringBuilder()
+                .append(user.getFirstName()).append("_").append(timestamp).append(".pdf");
         try {
-            File pdfFile = pdfConverter.convertHtmlToPdf(html, fileName);
+            File pdfFile = pdfConverter.convertHtmlToPdf(html, fileNameBuilder.toString());
             return processUpload(pdfFile);
         }
         catch (IOException e) {
