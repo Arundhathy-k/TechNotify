@@ -5,6 +5,8 @@ import com.kovan.app.util.User;
 import com.kovan.entity.Document;
 import com.kovan.app.exception.FileException;
 import com.kovan.service.DocumentService;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validator;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.Row;
@@ -23,6 +25,7 @@ import java.io.*;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import static io.micrometer.common.util.StringUtils.isBlank;
@@ -45,15 +48,17 @@ public class S3Service {
     private final DocumentService service;
     private final HtmlGeneratorService htmlGeneratorService;
     private final PdfConverter pdfConverter;
+    private final Validator validator;
     private final ExecutorService executorService = newFixedThreadPool(10);
     private final ExecutorService cpuExecutor = newFixedThreadPool(5);  // CPU-bound tasks like PDF generation
     private final ExecutorService ioExecutor = newFixedThreadPool(10);  // IO-bound tasks like file upload
 
-    public S3Service(S3Client s3Client, DocumentService service, HtmlGeneratorService htmlGeneratorService, PdfConverter pdfConverter) {
+    public S3Service(S3Client s3Client, DocumentService service, HtmlGeneratorService htmlGeneratorService, PdfConverter pdfConverter, Validator validator) {
         this.s3Client = s3Client;
         this.service = service;
         this.htmlGeneratorService = htmlGeneratorService;
         this.pdfConverter = pdfConverter;
+        this.validator = validator;
     }
 
     /**
@@ -353,8 +358,7 @@ public class S3Service {
                             .map(CompletableFuture::join)
                             .toList()) // Collect the results into a list
                     .join(); // Block and return the result
-        }
-        catch (IOException e) {
+        } catch (IOException e) {
             throw new FileException("Error processing file", e);
         }
     }
@@ -399,18 +403,31 @@ public class S3Service {
                 .experience(getIntCellValue(row, 18))
                 .build();
 
-        String html = htmlGeneratorService.generateHtml(user);
-        String timestamp = new SimpleDateFormat("yyyyMMddHHmmss").format(new Date());
-        StringBuilder fileNameBuilder = new StringBuilder()
-                .append(user.getFirstName()).append("_").append(timestamp).append(".pdf");
-        try {
-            File pdfFile = pdfConverter.convertHtmlToPdf(html, fileNameBuilder.toString());
-            return processUpload(pdfFile);
-        }
-        catch (IOException e) {
-            throw new FileException("Error generating PDF file for user: " + user.getFirstName(), e);
-        }
-    }
+         // Validate the user object
+         Set<ConstraintViolation<User>> violations = validator.validate(user);
+         if (!violations.isEmpty()) {
+             // Handle validation errors: return the error messages or skip the row
+             StringBuilder errorMessages = new StringBuilder();
+             for (ConstraintViolation<User> violation : violations) {
+                 errorMessages.append(violation.getMessage()).append(" ");
+             }
+             // Log errors or collect them for further processing
+             return "Validation failed for user: " + user.getFirstName() + ". Errors: " + errorMessages.toString();
+         }
+
+         // If validation passes, proceed with generating HTML and PDF
+         String html = htmlGeneratorService.generateHtml(user);
+         String timestamp = new SimpleDateFormat("yyyyMMddHHmmss").format(new Date());
+         StringBuilder fileNameBuilder = new StringBuilder()
+                 .append(user.getFirstName()).append("_").append(timestamp).append(".pdf");
+
+         try {
+             File pdfFile = pdfConverter.convertHtmlToPdf(html, fileNameBuilder.toString());
+             return processUpload(pdfFile);
+         } catch (IOException e) {
+             throw new FileException("Error generating PDF file for user: " + user.getFirstName(), e);
+         }
+     }
 
     /**
      * Processes the upload of a file by saving its metadata and uploading it to an S3 bucket.
