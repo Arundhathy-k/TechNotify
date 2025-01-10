@@ -5,6 +5,7 @@ import com.kovan.app.exception.FileException;
 import freemarker.template.Configuration;
 import freemarker.template.Template;
 import freemarker.template.TemplateException;
+import jakarta.validation.Valid;
 import org.springframework.stereotype.Service;
 import java.io.StringWriter;
 import java.io.IOException;
@@ -32,7 +33,7 @@ public class HtmlGeneratorService {
      * @param user the user object
      * @return the generated HTML string
      */
-    public String generateHtml(User user) {
+    public String generateHtml(@Valid User user) {
         try {
             // Extract fields and load the template
             Map<String, Object> data = extractFields(user);
@@ -53,7 +54,7 @@ public class HtmlGeneratorService {
      * @param user the object to extract fields from
      * @return a map of field names and non-null values
      */
-    private Map<String, Object> extractFields(User user) {
+    private Map<String, Object> extractFields(@Valid User user) {
         return userFields.stream()
                 .filter(field -> {
                     try {
