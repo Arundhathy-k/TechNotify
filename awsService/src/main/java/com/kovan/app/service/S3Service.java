@@ -22,19 +22,22 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
 import java.io.*;
+import java.lang.reflect.Field;
 import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import static io.micrometer.common.util.StringUtils.isBlank;
+import static java.lang.Double.parseDouble;
 import static java.time.Instant.now;
 import static java.util.List.of;
 import static java.util.Objects.isNull;
 import static java.util.Objects.requireNonNull;
+import static java.util.Optional.ofNullable;
 import static java.util.UUID.randomUUID;
 import static java.util.concurrent.Executors.newFixedThreadPool;
+import static java.util.stream.Collectors.toMap;
+import static java.util.stream.IntStream.range;
 import static java.util.stream.StreamSupport.stream;
 
 @Service
@@ -346,10 +349,11 @@ public class S3Service {
     private List<String> processExcelFile(MultipartFile file) {
         try (Workbook workbook = new XSSFWorkbook(file.getInputStream())) {
             Sheet sheet = workbook.getSheetAt(0);
+            Row headerRow = sheet.getRow(0);
             List<CompletableFuture<String>> futures = stream(sheet.spliterator(), true)
                     .skip(1) // Skip header row
                     .map(row -> CompletableFuture.supplyAsync(() ->
-                            processRowAndGeneratePdf(row), cpuExecutor))
+                            processRowAndGeneratePdf(row,headerRow), cpuExecutor))
                     .toList();
 
             // Wait for all futures to complete and collect the results
@@ -380,28 +384,24 @@ public class S3Service {
      * @return the unique identifier of the uploaded PDF file.
      * @throws FileException if an error occurs during PDF generation or file upload.
      */
-     public String processRowAndGeneratePdf(Row row) {
-        User user = User.builder()
-                .firstName(getCellValue(row, 0))
-                .lastName(getCellValue(row, 1))
-                .gender(getCellValue(row, 2))
-                .phone(getCellValue(row, 3))
-                .primaryAddress1(getCellValue(row, 4))
-                .primaryAddress2(getCellValue(row, 5))
-                .primaryCity(getCellValue(row, 6))
-                .primaryState(getCellValue(row, 7))
-                .primaryZip(getCellValue(row, 8))
-                .secondaryAddress1(getCellValue(row, 9))
-                .secondaryAddress2(getCellValue(row, 10))
-                .secondaryCity(getCellValue(row, 11))
-                .secondaryState(getCellValue(row, 12))
-                .secondaryZip(getCellValue(row, 13))
-                .companyName(getCellValue(row, 14))
-                .companyLocation(getCellValue(row, 15))
-                .companyDesignation(getCellValue(row, 16))
-                .dateOfJoining(getCellValue(row, 17))
-                .experience(getIntCellValue(row, 18))
-                .build();
+     public String processRowAndGeneratePdf(Row row, Row headerRow) {
+
+         Map<String, Integer> headerMapping = createHeaderMapping(headerRow);
+         User user = User.builder().build();
+         headerMapping.forEach((fieldName, columnIndex) -> {
+             try {
+                 Field field = User.class.getDeclaredField(fieldName);
+                 field.setAccessible(true);
+                 String cellValue = getCellValue(row, columnIndex);
+                 if (field.getType().equals(double.class)) {
+                     field.set(user,parseDouble(cellValue));
+                 } else {
+                     field.set(user,cellValue);
+                 }
+             } catch (NoSuchFieldException | IllegalAccessException e) {
+                 throw new FileException("Error mapping field: " + fieldName, e);
+             }
+         });
 
          // Validate the user object
          Set<ConstraintViolation<User>> violations = validator.validate(user);
@@ -428,6 +428,14 @@ public class S3Service {
              throw new FileException("Error generating PDF file for user: " + user.getFirstName(), e);
          }
      }
+
+    private Map<String, Integer> createHeaderMapping(Row headerRow) {
+        return range(0, headerRow.getLastCellNum())
+                .boxed()
+                .collect(toMap(i -> Optional.ofNullable(headerRow.getCell(i))
+                                .map(Cell::toString).map(String::trim)
+                                .orElseThrow(() -> new RuntimeException("Header cell is empty at index: " + i)), i -> i));
+    }
 
     /**
      * Processes the upload of a file by saving its metadata and uploading it to an S3 bucket.
@@ -484,37 +492,27 @@ public class S3Service {
      * @return the string representation of the cell's value, or an empty string if the cell is null.
      */
     public String getCellValue(Row row, int cellIndex) {
-        Cell cell = row.getCell(cellIndex);
-        return cell != null ? cell.toString() : "";
+        return ofNullable(row.getCell(cellIndex))
+                .map(Cell::toString)
+                .orElse("");
     }
 
     /**
-     * Retrieves the numeric value from a specified cell in a row.
-     * This method extracts the value of a cell as a {@code double}. It handles different cell types,
-     * including numeric and string, and gracefully returns a default value if the cell is null,
-     * contains invalid data, or is of an unsupported type.
-     * @param row the {@link Row} containing the cell.
-     * @param cellIndex the index of the cell within the row.
-     * @return the numeric value of the cell as a {@code double}. Returns {@code 0.0} if the cell
-     *         is null, the data is invalid, or the cell type is unsupported.
+     * Converts a string value to a double. If the value cannot be parsed as a valid double,
+     * it returns 0.0. If the value is null, it also returns 0.0.
+     *
+     * @param value the string value to be converted to a double
+     * @return the parsed double value, or 0.0 if the value is null or cannot be parsed as a valid double
      */
-    public double getIntCellValue(Row row, int cellIndex) {
-        Cell cell = row.getCell(cellIndex);
-        if (cell != null) {
-            switch (cell.getCellType()) {
-                case NUMERIC:
-                    return cell.getNumericCellValue();
-                case STRING:
-                    try {
-                        return Double.parseDouble(cell.getStringCellValue());
+    public double getIntCellValue(String value) {
+        return ofNullable(value)
+                .map(v -> {try {
+                        return parseDouble(v);
                     } catch (NumberFormatException e) {
                         return 0.0;
                     }
-                default:
-                    return 0.0;
-            }
-        }
-        return 0.0;
+                })
+                .orElse(0.0);
     }
 
     /**
