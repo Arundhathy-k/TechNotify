@@ -7,6 +7,7 @@ import com.kovan.app.util.User;
 import com.kovan.entity.Document;
 import com.kovan.app.exception.FileException;
 import com.kovan.service.DocumentService;
+import jakarta.validation.Validator;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
@@ -46,6 +47,9 @@ class S3ServiceTest {
 
     @Mock
     private PdfConverter pdfConverter;
+
+    @Mock
+    private Validator validator;
 
     @Value("${bucketName}")
     private String bucketName;
@@ -465,34 +469,28 @@ class S3ServiceTest {
     }
 
     @Test
-    void testGetIntCellValue_Success() {
-
-        Row row = mock(Row.class);
-        Cell stringCell = mock(Cell.class);
-        when(row.getCell(0)).thenReturn(stringCell);
-        when(stringCell.getCellType()).thenReturn(CellType.STRING);
-        when(stringCell.getStringCellValue()).thenReturn("456.78");
-
-        double result = s3Service.getIntCellValue(row, 0);
-        assertEquals(456.78, result, "The string cell with a valid number should be parsed and returned.");
-    }
-
-    @Test
     void testProcessRowAndGeneratePdf_Success() throws Exception {
-
         File tempExcelFile = File.createTempFile("test-excel", ".xlsx");
         tempExcelFile.deleteOnExit();
 
         try (Workbook workbook = new XSSFWorkbook();
              FileOutputStream fileOut = new FileOutputStream(tempExcelFile)) {
+
             Sheet sheet = workbook.createSheet("TestSheet");
 
-            Row row = sheet.createRow(0);
-            row.createCell(0).setCellValue("John");
-            row.createCell(1).setCellValue("Doe");
-            row.createCell(2).setCellValue("Male");
-            row.createCell(3).setCellValue("1234567890");
-            row.createCell(4).setCellValue("123 Main St");
+            Row headerRow = sheet.createRow(0);
+            headerRow.createCell(0).setCellValue("firstName");
+            headerRow.createCell(1).setCellValue("lastName");
+            headerRow.createCell(2).setCellValue("gender");
+            headerRow.createCell(3).setCellValue("phone");
+            headerRow.createCell(4).setCellValue("primaryAddress1");
+
+            Row dataRow = sheet.createRow(1);
+            dataRow.createCell(0).setCellValue("John");
+            dataRow.createCell(1).setCellValue("Doe");
+            dataRow.createCell(2).setCellValue("Male");
+            dataRow.createCell(3).setCellValue("1234567890");
+            dataRow.createCell(4).setCellValue("123 Main St");
 
             workbook.write(fileOut);
         }
@@ -505,14 +503,15 @@ class S3ServiceTest {
 
         when(htmlGeneratorService.generateHtml(any(User.class)))
                 .thenReturn("<html><body>Mock HTML</body></html>");
-        when(pdfConverter.convertHtmlToPdf(anyString(), anyString()))
+        when(pdfConverter.convertHtmlToPdf(any(String.class), any(String.class)))
                 .thenReturn(tempPdfFile);
 
         try (Workbook workbook = new XSSFWorkbook(tempExcelFile)) {
             Sheet sheet = workbook.getSheet("TestSheet");
-            Row testRow = sheet.getRow(0);
+            Row headerRow = sheet.getRow(0);
+            Row dataRow = sheet.getRow(1);
 
-            String result = s3Service.processRowAndGeneratePdf(testRow);
+            String result = s3Service.processRowAndGeneratePdf(dataRow, headerRow);
 
             assertNotNull(result);
             assertTrue(result.contains("uploaded successfully"));

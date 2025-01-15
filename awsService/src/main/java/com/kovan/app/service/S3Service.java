@@ -36,6 +36,7 @@ import static java.util.Objects.requireNonNull;
 import static java.util.Optional.ofNullable;
 import static java.util.UUID.randomUUID;
 import static java.util.concurrent.Executors.newFixedThreadPool;
+import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toMap;
 import static java.util.stream.IntStream.range;
 import static java.util.stream.StreamSupport.stream;
@@ -407,12 +408,11 @@ public class S3Service {
          Set<ConstraintViolation<User>> violations = validator.validate(user);
          if (!violations.isEmpty()) {
              // Handle validation errors: return the error messages or skip the row
-             StringBuilder errorMessages = new StringBuilder();
-             for (ConstraintViolation<User> violation : violations) {
-                 errorMessages.append(violation.getMessage()).append(" ");
-             }
+             String errorMessages = violations.stream()
+                     .map(ConstraintViolation::getMessage)
+                     .collect(joining(" "));
              // Log errors or collect them for further processing
-             return "Validation failed for user: " + user.getFirstName() + ". Errors: " + errorMessages.toString();
+             return "Validation failed for user: " + user.getFirstName() + ". Errors: " + errorMessages;
          }
 
          // If validation passes, proceed with generating HTML and PDF
@@ -495,24 +495,6 @@ public class S3Service {
         return ofNullable(row.getCell(cellIndex))
                 .map(Cell::toString)
                 .orElse("");
-    }
-
-    /**
-     * Converts a string value to a double. If the value cannot be parsed as a valid double,
-     * it returns 0.0. If the value is null, it also returns 0.0.
-     *
-     * @param value the string value to be converted to a double
-     * @return the parsed double value, or 0.0 if the value is null or cannot be parsed as a valid double
-     */
-    public double getIntCellValue(String value) {
-        return ofNullable(value)
-                .map(v -> {try {
-                        return parseDouble(v);
-                    } catch (NumberFormatException e) {
-                        return 0.0;
-                    }
-                })
-                .orElse(0.0);
     }
 
     /**
