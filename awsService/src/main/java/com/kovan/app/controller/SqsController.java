@@ -1,6 +1,7 @@
 package com.kovan.app.controller;
 
 import com.kovan.app.service.SqsService;
+import com.kovan.app.util.MyMessage;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import java.util.concurrent.CompletableFuture;
@@ -16,7 +17,7 @@ public class SqsController {
     }
 
     @PostMapping("/send")
-    public CompletableFuture<ResponseEntity<String>> sendMessage(@RequestBody String messageBody) {
+    public CompletableFuture<ResponseEntity<String>> sendMessage(@RequestBody MyMessage messageBody) {
         return sqsService.sendMessage(messageBody)
                 .thenApply(result -> ResponseEntity.ok("Message sent successfully."));
     }
