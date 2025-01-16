@@ -1,10 +1,18 @@
 package com.kovan.app.service;
 
+import com.kovan.app.util.PdfConverter;
+import com.kovan.app.util.User;
 import com.kovan.entity.Document;
 import com.kovan.app.exception.FileException;
 import com.kovan.service.DocumentService;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validator;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.tomcat.jni.FileInfo;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -13,18 +21,25 @@ import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
-import java.io.ByteArrayOutputStream;
-import java.io.FileNotFoundException;
-import java.util.List;
-import java.util.Map;
+import java.io.*;
+import java.lang.reflect.Field;
+import java.text.SimpleDateFormat;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import static io.micrometer.common.util.StringUtils.isBlank;
+import static java.lang.Double.parseDouble;
 import static java.time.Instant.now;
+import static java.util.List.of;
 import static java.util.Objects.isNull;
+import static java.util.Objects.requireNonNull;
+import static java.util.Optional.ofNullable;
 import static java.util.UUID.randomUUID;
 import static java.util.concurrent.Executors.newFixedThreadPool;
+import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toMap;
+import static java.util.stream.IntStream.range;
+import static java.util.stream.StreamSupport.stream;
 
 @Service
 @Slf4j
@@ -35,11 +50,19 @@ public class S3Service {
 
     private final S3Client s3Client;
     private final DocumentService service;
+    private final HtmlGeneratorService htmlGeneratorService;
+    private final PdfConverter pdfConverter;
+    private final Validator validator;
     private final ExecutorService executorService = newFixedThreadPool(10);
+    private final ExecutorService cpuExecutor = newFixedThreadPool(5);  // CPU-bound tasks like PDF generation
+    private final ExecutorService ioExecutor = newFixedThreadPool(10);  // IO-bound tasks like file upload
 
-    public S3Service(S3Client s3Client, DocumentService service) {
+    public S3Service(S3Client s3Client, DocumentService service, HtmlGeneratorService htmlGeneratorService, PdfConverter pdfConverter, Validator validator) {
         this.s3Client = s3Client;
         this.service = service;
+        this.htmlGeneratorService = htmlGeneratorService;
+        this.pdfConverter = pdfConverter;
+        this.validator = validator;
     }
 
     /**
@@ -282,75 +305,217 @@ public class S3Service {
     }
 
     /**
-     * Uploads a file to an Amazon S3 bucket and stores metadata in a database.
+     * Uploads a file asynchronously based on its extension.
+     * <p>
+     * This method checks if the file is an Excel file (with ".xlsx" extension). If so, it processes the Excel
+     * file and generates PDFs for each row. If the file is not an Excel file, it converts the uploaded
+     * {@link MultipartFile} into a {@link File} and uploads it to a storage service.
+     * </p>
      *
-     * @param file the {@link MultipartFile} to be uploaded. Must not be null and must contain a valid file name.
-     * @return a unique ID representing the uploaded file.
-     *
-     * @throws FileException if the file upload to S3 fails or an unexpected error occurs.
-     * Parameters:
-     * - PutObjectRequest:
-     *   - Contains metadata about the upload, such as:
-     *     - The bucket name where the file is being uploaded.
-     *     - The key (path/name of the file in S3).
-     *     - Additional configurations like permissions or storage class (if any).
-     * - RequestBody:
-     *   - Represents the actual content of the file being uploaded.
-     *   - Created using `RequestBody.fromInputStream()` with the following:
-     *     - `file.getInputStream()`:
-     *       - Obtains an InputStream from the uploaded file (provided as a {@link MultipartFile}).
-     *       - This stream is used to read the file's binary content for upload.
-     *     - `file.getSize()`:
-     *       - Specifies the size of the file in bytes.
-     *       - Helps S3 allocate resources and validate the upload.
-     * Logs:
-     * - INFO: Logs the file name, bucket name, and key path before starting the upload.
-     * - ERROR: Logs detailed error information if the upload fails.
-
-     * Workflow:
-     * 1. Determine the folder in S3 based on the file type using {@code determineFolder()}.
-     * 2. Generate a unique ID for the file and store metadata in the database.
-     * 3. Build a {@link PutObjectRequest} to specify the bucket and key for S3 upload.
-     * 4. Upload the file to S3 using the S3 client.
-
-     * Exceptions:
-     * - S3Exception: Thrown in the following scenarios:
-     *   - The specified bucket does not exist.
-     *   - The AWS credentials lack sufficient permissions for the operation.
-     *   - Invalid key (file path) due to naming issues.
-     *   - Network or AWS service-related issues during the operation.
+     * @param file the {@link MultipartFile} representing the uploaded file.
+     * @return a {@link List} of results:
+     *         <ul>
+     *           <li>For an Excel file: a list of unique identifiers of the uploaded PDF files.</li>
+     *           <li>For non-Excel files: a list containing the result of the file upload process.</li>
+     *         </ul>
+     * @throws FileException if an error occurs during the file processing or upload.
      */
-    public String uploadFile(MultipartFile file) {
-        String fileTypeFolder = determineFolder(file.getOriginalFilename());
-        String path = fileTypeFolder + "/" + file.getOriginalFilename();
+    public List<String> uploadFile(MultipartFile file) {
+        return "xlsx".equalsIgnoreCase(getFileExtension(file.getOriginalFilename()))
+                ? processExcelFile(file)
+                : CompletableFuture.supplyAsync(() -> {
+            File convertedFile = convertMultipartToFile(file);
+            String result = processUpload(convertedFile);
+            return of(result);
+        }, ioExecutor).join();
+    }
+
+    /**
+     * Processes an Excel file, reads its rows asynchronously, generates PDFs for each row,
+     * and uploads them to a storage service.
+     * <p>
+     * This method performs the following steps:
+     * <ol>
+     *   <li>Opens the Excel file as a workbook.</li>
+     *   <li>Reads the first sheet and processes each row starting from the second row (skipping the header).</li>
+     *   <li>For each row, creates an asynchronous task to process the row and generate a PDF.</li>
+     *   <li>Waits for all asynchronous tasks to complete and collects the results.</li>
+     * </ol>
+     * </p>
+     *
+     * @param file the {@link MultipartFile} representing the uploaded Excel file.
+     * @return a {@link List} of unique identifiers of the uploaded PDF files.
+     * @throws FileException if an error occurs while processing the Excel file.
+     */
+    private List<String> processExcelFile(MultipartFile file) {
+        try (Workbook workbook = new XSSFWorkbook(file.getInputStream())) {
+            Sheet sheet = workbook.getSheetAt(0);
+            Row headerRow = sheet.getRow(0);
+            List<CompletableFuture<String>> futures = stream(sheet.spliterator(), true)
+                    .skip(1) // Skip header row
+                    .map(row -> CompletableFuture.supplyAsync(() ->
+                            processRowAndGeneratePdf(row,headerRow), cpuExecutor))
+                    .toList();
+
+            // Wait for all futures to complete and collect the results
+            return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                    .thenApply(response -> futures.stream()
+                            .map(CompletableFuture::join)
+                            .toList()) // Collect the results into a list
+                    .join(); // Block and return the result
+        } catch (IOException e) {
+            throw new FileException("Error processing file", e);
+        }
+    }
+
+    /**
+     * Processes a row from an Excel sheet, creates a {@link User} object, generates an HTML representation,
+     * converts it into a PDF, and uploads the PDF file.
+     * <p>
+     * The method performs the following steps:
+     * <ol>
+     *   <li>Extracts cell data from the provided row to build a {@link User} object.</li>
+     *   <li>Generates an HTML representation of the user data using the {@code htmlGeneratorService}.</li>
+     *   <li>Converts the generated HTML into a PDF file using the {@code pdfConverter}.</li>
+     *   <li>Uploads the PDF file to a storage service using the {@code processUpload} method.</li>
+     * </ol>
+     * </p>
+     *
+     * @param row the {@link Row} object from the Excel sheet to be processed.
+     * @return the unique identifier of the uploaded PDF file.
+     * @throws FileException if an error occurs during PDF generation or file upload.
+     */
+     public String processRowAndGeneratePdf(Row row, Row headerRow) {
+
+         Map<String, Integer> headerMapping = createHeaderMapping(headerRow);
+         User user = User.builder().build();
+         headerMapping.forEach((fieldName, columnIndex) -> {
+             try {
+                 Field field = User.class.getDeclaredField(fieldName);
+                 field.setAccessible(true);
+                 String cellValue = getCellValue(row, columnIndex);
+                 if (field.getType().equals(double.class)) {
+                     field.set(user,parseDouble(cellValue));
+                 } else {
+                     field.set(user,cellValue);
+                 }
+             } catch (NoSuchFieldException | IllegalAccessException e) {
+                 throw new FileException("Error mapping field: " + fieldName, e);
+             }
+         });
+
+         // Validate the user object
+         Set<ConstraintViolation<User>> violations = validator.validate(user);
+         if (!violations.isEmpty()) {
+             // Handle validation errors: return the error messages or skip the row
+             String errorMessages = violations.stream()
+                     .map(ConstraintViolation::getMessage)
+                     .collect(joining(" "));
+             // Log errors or collect them for further processing
+             return "Validation failed for user: " + user.getFirstName() + ". Errors: " + errorMessages;
+         }
+
+         // If validation passes, proceed with generating HTML and PDF
+         String html = htmlGeneratorService.generateHtml(user);
+         String timestamp = new SimpleDateFormat("yyyyMMddHHmmss").format(new Date());
+         StringBuilder fileNameBuilder = new StringBuilder()
+                 .append(user.getFirstName()).append("_").append(timestamp).append(".pdf");
+
+         try {
+             File pdfFile = pdfConverter.convertHtmlToPdf(html, fileNameBuilder.toString());
+             return processUpload(pdfFile);
+         } catch (IOException e) {
+             throw new FileException("Error generating PDF file for user: " + user.getFirstName(), e);
+         }
+     }
+
+    private Map<String, Integer> createHeaderMapping(Row headerRow) {
+        return range(0, headerRow.getLastCellNum())
+                .boxed()
+                .collect(toMap(i -> Optional.ofNullable(headerRow.getCell(i))
+                                .map(Cell::toString).map(String::trim)
+                                .orElseThrow(() -> new RuntimeException("Header cell is empty at index: " + i)), i -> i));
+    }
+
+    /**
+     * Processes the upload of a file by saving its metadata and uploading it to an S3 bucket.
+     * This method performs the following steps:
+
+     * 1)Determines the target folder for the file based on its name.
+     * 2)Generates a unique identifier for the file and saves its metadata asynchronously.
+     * 3)Uploads the file to an S3 bucket asynchronously.
+     * The method waits for both the metadata saving and the file upload to complete and returns the
+     * unique identifier of the saved document.
+     *
+     * @param file the {@link File} to be processed and uploaded.
+     * @return the unique identifier of the uploaded document.
+     * @throws FileException if an error occurs during the upload process or metadata saving.
+     */
+    public String processUpload(File file) {
+        String fileTypeFolder = determineFolder(file.getName());
+        String path = fileTypeFolder + "/" + file.getName();
         String uniqueId = randomUUID().toString();
 
-        // Save metadata about the file to the database.
-        service.saveDocument(Document.builder()
-                .id(uniqueId)
-                .fileName(path)
-                .createdDate(now().toString())
-                .updatedDate(now().toString()).build());
+        CompletableFuture<String> storedIdFuture = CompletableFuture.supplyAsync(() -> service.saveDocument(
+                Document.builder().id(uniqueId).fileName(path)
+                        .createdDate(now().toString()).updatedDate(now().toString()).build()), ioExecutor);
 
-        try {
-            log.info("Uploading file {} to bucket {}, key: {}", file.getOriginalFilename(), bucketName, path);
+        CompletableFuture<Void> uploadFuture = CompletableFuture.runAsync(() -> {
+            try {
+                log.info("Uploading file {} to bucket {}, key: {}", file.getName(), bucketName, path);
 
-            // Create a request to upload the file to S3.
-            PutObjectRequest putObjectRequest = PutObjectRequest.builder()
-                    .bucket(bucketName)
-                    .key(path)
-                    .build();
+                PutObjectRequest putObjectRequest = PutObjectRequest.builder()
+                        .bucket(bucketName).key(path).build();
 
-            // Upload the file to the S3 bucket.
-            s3Client.putObject(putObjectRequest, RequestBody.fromInputStream(file.getInputStream(), file.getSize()));
-        } catch (S3Exception e) {
-            log.error("Error uploading file to S3: {}", e.awsErrorDetails().errorMessage());
-            throw new FileException("S3 file upload failed: " + e.awsErrorDetails().errorMessage(), e);
-        } catch (Exception e) {
-            log.error("Unexpected error uploading file to S3", e);
-            throw new FileException("File upload failed", e);
+                s3Client.putObject(putObjectRequest, RequestBody.fromFile(file.toPath()));
+            } catch (S3Exception e) {
+                log.error("Error uploading file to S3: {}", e.awsErrorDetails().errorMessage());
+                throw new FileException("S3 file upload failed: " + e.awsErrorDetails().errorMessage(), e);
+            } catch (Exception e) {
+                log.error("Unexpected error uploading file to S3", e);
+                throw new FileException("File upload failed", e);
+            }
+        }, ioExecutor);
+
+        storedIdFuture.join();
+        uploadFuture.join();
+
+        return file.getName() + " uploaded successfully with id: " + storedIdFuture.join();
+    }
+
+    /**
+     * Retrieves the value of a specified cell in a row as a string.
+     * This method extracts the value of a cell and converts it to its string representation.
+     * If the cell is null, an empty string is returned.
+     * @param row the {@link Row} containing the cell.
+     * @param cellIndex the index of the cell within the row.
+     * @return the string representation of the cell's value, or an empty string if the cell is null.
+     */
+    public String getCellValue(Row row, int cellIndex) {
+        return ofNullable(row.getCell(cellIndex))
+                .map(Cell::toString)
+                .orElse("");
+    }
+
+    /**
+     * Converts a {@link MultipartFile} to a {@link File}.
+     * <p>
+     * This method takes a MultipartFile, writes its contents to a temporary File on the local filesystem,
+     * and returns the resulting File object.
+     * </p>
+     * @param file the {@link MultipartFile} to be converted.
+     * @return the converted {@link File}.
+     * @throws FileException if an I/O error occurs during the conversion.
+     */
+    private File convertMultipartToFile(MultipartFile file) {
+        File convertedFile = new File(requireNonNull(file.getOriginalFilename()));
+        try (FileOutputStream fos = new FileOutputStream(convertedFile)) {
+            fos.write(file.getBytes());
+        } catch (IOException e) {
+            log.error("Error converting MultipartFile to File", e);
+            throw new FileException("Error converting file", e);
         }
-        return uniqueId;
+        return convertedFile;
     }
 
     /**

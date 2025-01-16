@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import java.io.IOException;
 import java.util.List;
 import static java.util.Objects.isNull;
 
@@ -41,11 +42,8 @@ public class S3Controller {
         }
 
     @PostMapping("/upload")
-    public ResponseEntity<String> uploadFile(@RequestParam("file") MultipartFile file){
-        if (isNull(file) || file.isEmpty()) {
-            return ResponseEntity.badRequest().body("File is missing or empty");
-        }
-        return ResponseEntity.ok("File uploaded successfully with ID: " + s3Service.uploadFile(file));
+    public ResponseEntity<List<String>> uploadFile(@RequestParam("file") MultipartFile file) {
+        return ResponseEntity.ok(s3Service.uploadFile(file));
     }
 
     @PostMapping("/updateFile/{fileId}")
