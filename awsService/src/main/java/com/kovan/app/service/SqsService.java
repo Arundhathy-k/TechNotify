@@ -1,11 +1,11 @@
 package com.kovan.app.service;
 
 import com.kovan.app.exception.SqsServiceException;
+import io.awspring.cloud.sqs.annotation.SqsListener;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.services.sqs.SqsAsyncClient;
 import software.amazon.awssdk.services.sqs.model.*;
-import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import org.springframework.beans.factory.annotation.Value;
 
@@ -30,77 +30,58 @@ public class SqsService {
                     .build();
 
             return sqsAsyncClient.sendMessage(sendMessageRequest)
-                    .thenAccept(response -> log.info("Message sent successfully. Message ID: {}", response.messageId()))
-                    .thenCompose(result -> {
-                        ReceiveMessageRequest receiveMessageRequest = ReceiveMessageRequest.builder()
-                                .queueUrl(queueUrl)
-                                .maxNumberOfMessages(10)
-                                .build();
+                    .thenAccept(response -> log.info("Message sent successfully. Message ID: {}", response.messageId()));
+        } catch (SqsException e) {
+            throw new SqsServiceException("Failed to send message", e);
+        }
+    }
 
-                        return sqsAsyncClient.receiveMessage(receiveMessageRequest)
-                                .thenAccept(receiveResponse -> {
-                                    List<Message> messages = receiveResponse.messages();
-                                    log.info("Received {} messages.", messages.size());
-                                    messages.forEach(message -> log.info("Message body: {}", message.body()));
-                                });
+    @SqsListener("MessageQueue")
+    public void receiveMessages(String messageBody) {
+        try {
+            log.info("Received Message: {}", messageBody);
+        } catch (Exception e) {
+            log.error("Error processing message: {}", messageBody, e);
+            throw new SqsServiceException("Failed to receive messages", e);
+        }
+    }
+
+    public CompletableFuture<String> createQueue(String queueName) {
+        try {
+            CreateQueueRequest createQueueRequest = CreateQueueRequest.builder()
+                    .queueName(queueName).build();
+
+            return sqsAsyncClient.createQueue(createQueueRequest)
+                    .thenApply(response -> {
+                        log.info("Queue created successfully. Queue URL: {}", response.queueUrl());
+                        return response.queueUrl();
                     });
         } catch (SqsException e) {
-            throw new SqsServiceException("Failed to send and retrieve messages", e);
-        }
-    }
-
-    private CompletableFuture<Void> deleteMessage(String receiptHandle) {
-              try {
-              DeleteMessageRequest deleteMessageRequest = DeleteMessageRequest.builder()
-                    .queueUrl(queueUrl)
-                    .receiptHandle(receiptHandle)
-                    .build();
-
-              return sqsAsyncClient.deleteMessage(deleteMessageRequest)
-                    .thenRun(() -> log.info("Message deleted successfully. Receipt Handle: {}", receiptHandle));
-              } catch (SqsException e) {
-                  throw new SqsServiceException("Failed to delete message", e);
-        }
-    }
-
-        public CompletableFuture<String> createQueue(String queueName) {
-            try {
-                CreateQueueRequest createQueueRequest = CreateQueueRequest.builder()
-                        .queueName(queueName)
-                        .build();
-
-                return sqsAsyncClient.createQueue(createQueueRequest)
-                        .thenApply(response -> {
-                            log.info("Queue created successfully. Queue URL: {}", response.queueUrl());
-                            return response.queueUrl();
-                        });
-            } catch (SqsException e) {
                 throw new SqsServiceException("Failed to create queue", e);
-            }
         }
+    }
 
-        public CompletableFuture<Void> deleteQueue(String queueUrl) {
-            try {
-                DeleteQueueRequest deleteQueueRequest = DeleteQueueRequest.builder()
-                        .queueUrl(queueUrl)
-                        .build();
+    public CompletableFuture<Void> deleteQueue(String queueUrl) {
+        try {
+            DeleteQueueRequest deleteQueueRequest = DeleteQueueRequest.builder()
+                    .queueUrl(queueUrl).build();
 
-                return sqsAsyncClient.deleteQueue(deleteQueueRequest)
-                        .thenRun(() -> log.info("Queue deleted successfully: {}", queueUrl));
-            } catch (SqsException e) {
-                throw new SqsServiceException("Failed to delete queue", e);
-            }
+            return sqsAsyncClient.deleteQueue(deleteQueueRequest)
+                    .thenRun(() -> log.info("Queue deleted successfully: {}", queueUrl));
+        } catch (SqsException e) {
+            throw new SqsServiceException("Failed to delete queue", e);
         }
+    }
 
-        public CompletableFuture<ListQueuesResponse> listQueues() {
-            try {
-                return sqsAsyncClient.listQueues()
-                        .thenApply(response -> {
-                            log.info("Retrieved {} queues.", response.queueUrls().size());
-                            return response;
-                        });
-            } catch (SqsException e) {
-                throw new SqsServiceException("Failed to list queues", e);
-            }
+    public CompletableFuture<ListQueuesResponse> listQueues() {
+        try {
+            return sqsAsyncClient.listQueues()
+                    .thenApply(response -> {
+                        log.info("Retrieved {} queues.", response.queueUrls().size());
+                        return response;
+                    });
+        } catch (SqsException e) {
+            throw new SqsServiceException("Failed to list queues", e);
+        }
     }
 }
