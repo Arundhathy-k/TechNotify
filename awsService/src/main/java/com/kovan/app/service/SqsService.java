@@ -27,7 +27,7 @@ public class SqsService {
         this.objectMapper = objectMapper;
     }
 
-    public CompletableFuture<Void> sendMessage(Object message) {
+    public CompletableFuture<Void> sendMessage(MyMessage message) {
         try {
 
             // Serialize the object to JSON string
