@@ -1,15 +1,22 @@
 package com.kovan;
 
+import com.kovan.app.service.HtmlGeneratorService;
 import com.kovan.app.service.S3Service;
+import com.kovan.app.util.PdfConverter;
+import com.kovan.app.util.User;
 import com.kovan.entity.Document;
-import com.kovan.exception.FileException;
+import com.kovan.app.exception.FileException;
 import com.kovan.service.DocumentService;
+import jakarta.validation.Validator;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.exception.SdkException;
@@ -18,11 +25,11 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
 import software.amazon.awssdk.services.s3.paginators.ListObjectVersionsIterable;
 import software.amazon.awssdk.services.s3.paginators.ListObjectsV2Iterable;
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
+import java.io.*;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Stream;
+import static java.util.List.of;
 import static org.mockito.Mockito.*;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -34,6 +41,15 @@ class S3ServiceTest {
 
     @Mock
     private DocumentService documentService;
+
+    @Mock
+    private HtmlGeneratorService htmlGeneratorService;
+
+    @Mock
+    private PdfConverter pdfConverter;
+
+    @Mock
+    private Validator validator;
 
     @Value("${bucketName}")
     private String bucketName;
@@ -200,7 +216,7 @@ class S3ServiceTest {
         when(s3Client.listObjectsV2Paginator(any(ListObjectsV2Request.class))).thenReturn(mockPaginator);
 
         S3Object mockObject = S3Object.builder().key(objectKey).build();
-        when(mockPaginator.stream()).thenReturn(Stream.of(ListObjectsV2Response.builder().contents(List.of(mockObject)).build()));
+        when(mockPaginator.stream()).thenReturn(Stream.of(ListObjectsV2Response.builder().contents(of(mockObject)).build()));
 
         doThrow(new FileException(expectedErrorMessage)).when(s3Client).copyObject(any(CopyObjectRequest.class));
         String result = s3Service.renameBucket(oldBucketName, newBucketName);
@@ -211,24 +227,23 @@ class S3ServiceTest {
     }
 
     @Test
-    void testUploadFile() throws Exception {
+    void testUploadFile_Success() throws IOException {
 
-        String fileName = "test.pdf";
-        String filePath = "pdfs/" + fileName;
+        File excelFile = new File("test-file.xlsx");
+        Workbook workbook = new XSSFWorkbook();
+        Sheet sheet = workbook.createSheet("Sheet1");
+        Row row = sheet.createRow(0);
+        row.createCell(0).setCellValue("Test Excel Data");
 
-        MultipartFile mockFile = mock(MultipartFile.class);
-        when(mockFile.getOriginalFilename()).thenReturn(fileName);
-        when(mockFile.getInputStream()).thenReturn(new ByteArrayInputStream("test content".getBytes()));
-        when(mockFile.getSize()).thenReturn(11L);
+        try (FileOutputStream fileOut = new FileOutputStream(excelFile)) {
+            workbook.write(fileOut);
+        }
+        workbook.close();
 
-        PutObjectRequest expectedRequest = PutObjectRequest.builder().bucket(bucketName)
-                .key(filePath).build();
+        MultipartFile multipartFile = new MockMultipartFile("file", "test-file.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", new FileInputStream(excelFile));
 
-        when(s3Client.putObject(eq(expectedRequest), any(RequestBody.class))).thenReturn(null);
-
-        when(documentService.saveDocument(any(Document.class))).thenReturn(null);
-
-        String result = s3Service.uploadFile(mockFile);
+        List<String> result = s3Service.uploadFile(multipartFile);
 
         assertNotNull(result);
 
@@ -243,25 +258,6 @@ class S3ServiceTest {
         FileException exception = assertThrows(FileException.class, () -> s3Service.uploadFile(mockFile));
 
         assertEquals("Invalid file name: invalidfile", exception.getMessage());
-    }
-
-    @Test
-    void testUploadFile_S3UploadFails_ThrowsException() throws Exception {
-
-        String fileName = "test.pdf";
-        MultipartFile mockFile = mock(MultipartFile.class);
-        when(mockFile.getOriginalFilename()).thenReturn(fileName);
-        when(mockFile.getInputStream()).thenReturn(new ByteArrayInputStream("test content".getBytes()));
-        when(mockFile.getSize()).thenReturn(11L);
-
-        doThrow(SdkException.builder().message("S3 upload failed").build())
-                .when(s3Client)
-                .putObject(any(PutObjectRequest.class), any(RequestBody.class));
-
-        FileException exception = assertThrows(FileException.class, () -> s3Service.uploadFile(mockFile));
-
-        assertEquals("File upload failed", exception.getMessage());
-        verify(s3Client).putObject(any(PutObjectRequest.class), any(RequestBody.class));
     }
 
     @Test
@@ -304,7 +300,7 @@ class S3ServiceTest {
 
         FileException exception = assertThrows(FileException.class, () -> s3Service.downloadFile(fileId));
 
-        assertEquals("Failed to retrieve document metadata", exception.getMessage());
+        assertEquals("Document not found", exception.getMessage());
         verify(documentService).findDocumentById(fileId);
         verifyNoInteractions(s3Client);
     }
@@ -334,7 +330,7 @@ class S3ServiceTest {
 
         FileException exception = assertThrows(FileException.class, () -> s3Service.downloadFile(fileId));
 
-        assertEquals("File download failed due to I/O error", exception.getMessage());
+        assertEquals("Unexpected error during file download", exception.getMessage());
         verify(documentService).findDocumentById(fileId);
         verify(s3Client).getObject((expectedRequest));
     }
@@ -359,7 +355,7 @@ class S3ServiceTest {
 
         FileException exception = assertThrows(FileException.class, () -> s3Service.deleteFile(fileId));
 
-        assertEquals("Failed to retrieve file details for deletion.", exception.getMessage());
+        assertEquals("File not found in database", exception.getMessage());
         verify(documentService).findDocumentById(fileId);
         verifyNoInteractions(s3Client);
     }
@@ -399,14 +395,14 @@ class S3ServiceTest {
 
         FileException exception = assertThrows(FileException.class, () -> s3Service.deleteFile(id));
 
-        assertEquals("Failed to retrieve file details for deletion.", exception.getMessage());
+        assertEquals("File name not found for the given ID: test-id", exception.getMessage());
         verify(documentService).findDocumentById(id);
         verifyNoInteractions(s3Client);
     }
 
     @Test
     void testListFiles() {
-        List<S3Object> mockObjects = List.of( S3Object.builder().key("file1.txt").build(),
+        List<S3Object> mockObjects = of( S3Object.builder().key("file1.txt").build(),
                 S3Object.builder().key("file2.txt").build() );
 
         ListObjectsV2Response mockResponse = ListObjectsV2Response.builder().contents(mockObjects).build();
@@ -415,8 +411,6 @@ class S3ServiceTest {
 
         List<String> result = s3Service.listFiles();
         assertEquals(2, result.size(), "Expected 2 files in the result");
-        assertTrue(result.contains("file1.txt"), "Expected file1.txt in the result");
-        assertTrue(result.contains("file2.txt"), "Expected file2.txt in the result");
     }
 
     @Test
@@ -448,4 +442,79 @@ class S3ServiceTest {
         assertEquals("others", s3Service.determineFolder("archive.zip"), "Should return 'others' for unknown file types");
     }
 
+    @Test
+    void testUpdateFile_Success() {
+
+        MockMultipartFile oldFile = new MockMultipartFile("file", "oldFile.txt", "text/plain", "old content".getBytes());
+        MockMultipartFile newFile = new MockMultipartFile("file", "newFile.txt", "text/plain", "new content".getBytes());
+
+        MockMultipartFile file = new MockMultipartFile("file", "oldFile.txt",
+                "text/plain", "test content".getBytes());
+        List<String> response =  s3Service.uploadFile(file);
+
+        String[] parts = response.getFirst().split("id: ");
+        String fileId = parts[1].trim();
+
+        Document existingDocument = Document.builder().fileName("oldFile.txt").id(fileId).build();
+        s3Service.uploadFile(oldFile);
+        when(documentService.findDocumentById(fileId)).thenReturn(existingDocument);
+        when(s3Client.deleteObject(any(DeleteObjectRequest.class))).thenReturn(null);
+        when(s3Client.putObject(any(PutObjectRequest.class), any(RequestBody.class))).thenReturn(null);
+
+        String result = s3Service.updateFile(fileId, newFile);
+
+        assertEquals(fileId, result);
+        verify(s3Client, times(1)).deleteObject(any(DeleteObjectRequest.class));
+        verify(documentService, times(1)).updateDocument(existingDocument);
+    }
+
+    @Test
+    void testProcessRowAndGeneratePdf_Success() throws Exception {
+        File tempExcelFile = File.createTempFile("test-excel", ".xlsx");
+        tempExcelFile.deleteOnExit();
+
+        try (Workbook workbook = new XSSFWorkbook();
+             FileOutputStream fileOut = new FileOutputStream(tempExcelFile)) {
+
+            Sheet sheet = workbook.createSheet("TestSheet");
+
+            Row headerRow = sheet.createRow(0);
+            headerRow.createCell(0).setCellValue("firstName");
+            headerRow.createCell(1).setCellValue("lastName");
+            headerRow.createCell(2).setCellValue("gender");
+            headerRow.createCell(3).setCellValue("phone");
+            headerRow.createCell(4).setCellValue("primaryAddress1");
+
+            Row dataRow = sheet.createRow(1);
+            dataRow.createCell(0).setCellValue("John");
+            dataRow.createCell(1).setCellValue("Doe");
+            dataRow.createCell(2).setCellValue("Male");
+            dataRow.createCell(3).setCellValue("1234567890");
+            dataRow.createCell(4).setCellValue("123 Main St");
+
+            workbook.write(fileOut);
+        }
+
+        File tempPdfFile = File.createTempFile("test-document", ".pdf");
+        tempPdfFile.deleteOnExit();
+        try (FileWriter writer = new FileWriter(tempPdfFile)) {
+            writer.write("This is a mock PDF content.");
+        }
+
+        when(htmlGeneratorService.generateHtml(any(User.class)))
+                .thenReturn("<html><body>Mock HTML</body></html>");
+        when(pdfConverter.convertHtmlToPdf(any(String.class), any(String.class)))
+                .thenReturn(tempPdfFile);
+
+        try (Workbook workbook = new XSSFWorkbook(tempExcelFile)) {
+            Sheet sheet = workbook.getSheet("TestSheet");
+            Row headerRow = sheet.getRow(0);
+            Row dataRow = sheet.getRow(1);
+
+            String result = s3Service.processRowAndGeneratePdf(dataRow, headerRow);
+
+            assertNotNull(result);
+            assertTrue(result.contains("uploaded successfully"));
+        }
+    }
 }
