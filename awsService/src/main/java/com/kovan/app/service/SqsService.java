@@ -1,10 +1,6 @@
 package com.kovan.app.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kovan.app.exception.SqsServiceException;
-import com.kovan.app.util.MyMessage;
-import io.awspring.cloud.sqs.annotation.SqsListener;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.services.sqs.SqsAsyncClient;
@@ -20,43 +16,9 @@ public class SqsService {
     private String queueUrl;
 
         private final SqsAsyncClient sqsAsyncClient;
-        private final ObjectMapper objectMapper;
 
-    public SqsService(SqsAsyncClient sqsAsyncClient, ObjectMapper objectMapper) {
+    public SqsService(SqsAsyncClient sqsAsyncClient) {
         this.sqsAsyncClient = sqsAsyncClient;
-        this.objectMapper = objectMapper;
-    }
-
-    public CompletableFuture<Void> sendMessage(MyMessage message) {
-        try {
-
-            // Serialize the object to JSON string
-            String messageBody = objectMapper.writeValueAsString(message);
-            SendMessageRequest sendMessageRequest = SendMessageRequest.builder()
-                    .queueUrl(queueUrl)
-                    .messageBody(messageBody)
-                    .build();
-
-            return sqsAsyncClient.sendMessage(sendMessageRequest)
-                    .thenAccept(response -> log.info("Message sent successfully. Message ID: {}", response.messageId()));
-        } catch (JsonProcessingException e) {
-            throw new SqsServiceException("Failed to serialize message to JSON", e);
-        }
-        catch (SqsException e) {
-            throw new SqsServiceException("Failed to send message", e);
-        }
-    }
-
-    @SqsListener("MessageQueue")
-    public void receiveMessages(String messageBody) {
-        try {
-            // convert the JSON string to a Java object
-            MyMessage message = objectMapper.readValue(messageBody, MyMessage.class);
-            log.info("Received Message: {}", message);
-        } catch (Exception e) {
-            log.error("Error processing message: {}", messageBody, e);
-            throw new SqsServiceException("Failed to receive messages", e);
-        }
     }
 
     public CompletableFuture<String> createQueue(String queueName) {

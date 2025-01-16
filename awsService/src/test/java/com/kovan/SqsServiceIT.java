@@ -1,5 +1,6 @@
 package com.kovan;
 
+import com.kovan.app.service.SqsPublisher;
 import com.kovan.app.service.SqsService;
 import com.kovan.app.util.MyMessage;
 import org.junit.jupiter.api.Test;
@@ -22,11 +23,14 @@ class SqsServiceIT {
     @Autowired
     private SqsService sqsService;
 
+    @Autowired
+    private SqsPublisher sqsPublisher;
+
     @Test
     void testSendMessage() {
         MyMessage message = MyMessage.builder().content("Integration Test Message").build();
 
-        CompletableFuture<Void> response = sqsService.sendMessage(message);
+        CompletableFuture<Void> response = sqsPublisher.sendMessage(message);
         response.join();
 
         assertNotNull(response);

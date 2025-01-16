@@ -1,5 +1,6 @@
 package com.kovan.app.controller;
 
+import com.kovan.app.service.SqsPublisher;
 import com.kovan.app.service.SqsService;
 import com.kovan.app.util.MyMessage;
 import org.springframework.http.ResponseEntity;
@@ -11,14 +12,16 @@ import java.util.concurrent.CompletableFuture;
 public class SqsController {
 
     private final SqsService sqsService;
+    private final SqsPublisher sqsPublisher;
 
-    public SqsController(SqsService sqsService) {
+    public SqsController(SqsService sqsService, SqsPublisher sqsPublisher) {
         this.sqsService = sqsService;
+        this.sqsPublisher = sqsPublisher;
     }
 
     @PostMapping("/send")
     public CompletableFuture<ResponseEntity<String>> sendMessage(@RequestBody MyMessage messageBody) {
-        return sqsService.sendMessage(messageBody)
+        return sqsPublisher.sendMessage(messageBody)
                 .thenApply(result -> ResponseEntity.ok("Message sent successfully."));
     }
 
