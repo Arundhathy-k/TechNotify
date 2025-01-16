@@ -33,8 +33,8 @@ class SqsPublisherTest {
 
     @Test
     void testSendMessage() throws JsonProcessingException {
-        MyMessage message = new MyMessage();
-        message.setContent("Test Message");
+
+        MyMessage message = MyMessage.builder().content("Test Message").build();
 
         when(objectMapper.writeValueAsString(message)).thenReturn("{\"content\":\"Test Message\"}");
 
