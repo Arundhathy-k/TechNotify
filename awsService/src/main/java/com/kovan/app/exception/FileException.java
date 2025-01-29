@@ -1,4 +1,4 @@
-package com.kovan.exception;
+package com.kovan.app.exception;
 
 public class FileException extends RuntimeException{
 

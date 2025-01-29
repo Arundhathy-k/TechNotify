@@ -31,7 +31,21 @@ public class DocumentService {
     public Document findDocumentById(String id){
         return documentRepository.findById(id).orElseThrow(() -> new RuntimeException("Data not found for id: " + id));
     }
+    public String findIdByFileName(String fileName){
+      Document document = findByFileName(fileName).orElseThrow(() -> new RuntimeException("Data not found"));
+      return document.getId();
+    }
     public void deleteFile(String id){
         documentRepository.deleteById(id);
+    }
+
+    public void updateDocument(Document updatedDocument) {
+        Document existingDocument = documentRepository.findById(updatedDocument.getId())
+                .orElseThrow(() -> new RuntimeException("Data not found for id: " + updatedDocument.getId()));
+
+        existingDocument.setFileName(updatedDocument.getFileName());
+        existingDocument.setUpdatedDate(updatedDocument.getUpdatedDate());
+
+         documentRepository.save(existingDocument);
     }
 }
