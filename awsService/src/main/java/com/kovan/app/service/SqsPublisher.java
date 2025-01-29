@@ -27,6 +27,13 @@ public class SqsPublisher {
         this.objectMapper = objectMapper;
     }
 
+    /**
+     * Sends a message to the SQS queue.
+     *
+     * @param message The message to send.
+     * @return A CompletableFuture that completes when the message has been sent.
+     * @throws SqsServiceException If the message cannot be serialized to JSON or if sending the message fails.
+     */
     public CompletableFuture<Void> sendMessage(MyMessage message) {
         try {
             // Serialize the object to JSON string

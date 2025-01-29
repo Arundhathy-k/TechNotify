@@ -21,6 +21,13 @@ public class SqsService {
         this.sqsAsyncClient = sqsAsyncClient;
     }
 
+    /**
+     * Creates a new SQS queue with the given name.
+     *
+     * @param queueName The name of the queue to create.
+     * @return A CompletableFuture that resolves to the URL of the newly created queue.
+     * @throws SqsServiceException if queue creation fails.
+     */
     public CompletableFuture<String> createQueue(String queueName) {
         try {
             CreateQueueRequest createQueueRequest = CreateQueueRequest.builder()
@@ -36,6 +43,13 @@ public class SqsService {
         }
     }
 
+    /**
+     * Deletes the SQS queue at the given URL.
+     *
+     * @param queueUrl The URL of the queue to delete.
+     * @return A CompletableFuture that completes when the queue is successfully deleted.
+     * @throws SqsServiceException if queue deletion fails.
+     */
     public CompletableFuture<Void> deleteQueue(String queueUrl) {
         try {
             DeleteQueueRequest deleteQueueRequest = DeleteQueueRequest.builder()
@@ -48,6 +62,12 @@ public class SqsService {
         }
     }
 
+    /**
+     * Lists all SQS queues.
+     *
+     * @return A CompletableFuture that resolves to a ListQueuesResponse containing the list of queues.
+     * @throws SqsServiceException if listing queues fails.
+     */
     public CompletableFuture<ListQueuesResponse> listQueues() {
         try {
             return sqsAsyncClient.listQueues()

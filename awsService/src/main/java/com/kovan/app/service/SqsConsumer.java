@@ -16,6 +16,12 @@ public class SqsConsumer {
         this.objectMapper = objectMapper;
     }
 
+    /**
+     * Receives messages from the SQS queue.
+     *
+     * @param messageBody The message body received from the queue.
+     * @throws SqsServiceException If there is an error processing the message.
+     */
     @SqsListener("MessageQueue")
     public void receiveMessages(String messageBody) {
         try {
