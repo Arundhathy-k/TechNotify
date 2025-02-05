@@ -29,8 +29,10 @@
 		<module>mysql-dao</module>
 		<module>mongo-dao</module>
         <module>awsService</module>
+		<module>publisherService</module>
+		<module>consumerService</module>
 
-    </modules>
+	</modules>
 	<scm>
 		<connection/>
 		<developerConnection/>
