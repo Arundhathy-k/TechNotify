@@ -4,13 +4,14 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import java.io.Serializable;
 import java.util.List;
 
 @Data
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-public class NewsDto {
+public class NewsDto  implements Serializable {
 
     private String id;
 
@@ -26,7 +27,7 @@ public class NewsDto {
     @Builder
     @AllArgsConstructor
     @NoArgsConstructor
-    public static class Article {
+    public static class Article implements Serializable{
         private Source source;
         private String author;
         private String title;
@@ -40,7 +41,7 @@ public class NewsDto {
         @Builder
         @AllArgsConstructor
         @NoArgsConstructor
-        public static class Source {
+        public static class Source implements Serializable{
             private String id;
             private String name;
         }

@@ -20,8 +20,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import static java.time.LocalDate.now;
 import static java.util.Collections.singletonList;
-import static java.util.Optional.empty;
-import static java.util.Optional.of;
 import static java.util.stream.Collectors.*;
 import static java.util.Objects.*;
 import static java.util.stream.Stream.iterate;
