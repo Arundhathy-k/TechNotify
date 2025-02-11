@@ -5,11 +5,13 @@ import com.kovan.entity.NewsEntity;
 import com.kovan.exception.NewsRetrievalException;
 import com.kovan.mapper.NewsMapper;
 import com.kovan.repository.NewsRepository;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Optional;
 import static java.util.Objects.nonNull;
@@ -18,6 +20,7 @@ import static java.util.Objects.isNull;
 import static org.apache.commons.lang3.StringUtils.isBlank;
 
 @Service
+@Slf4j
 public class NewsRepositoryService {
 
     private final NewsRepository newsRepository;
@@ -30,6 +33,7 @@ public class NewsRepositoryService {
         this.cacheManager = cacheManager;
     }
 
+    @Transactional
     public NewsDto saveNewsInDb(NewsDto newsDto) {
         if (isNull(newsDto)) {
             throw new NewsRetrievalException("NewsDto cannot be null");
@@ -43,15 +47,20 @@ public class NewsRepositoryService {
             cache.put(savedNews.getPublishedAt(), newsMapper.toDto(savedNews));
         }
 
-        System.out.println("News saved in db .........");
+        log.info("News saved in db .........");
         return newsMapper.toDto(savedNews);
     }
 
     @Cacheable(value = "news", key = "#date")
     public Optional<NewsDto> findNewsInDb(String date) {
-        System.out.println("News fetched from db.........");
-        return newsRepository.findByPublishedAt(date)
-                .map(newsMapper::toDto);
+
+        Optional<NewsDto> news = newsRepository.findByPublishedAt(date).map(newsMapper::toDto);
+        if (news.isEmpty()) {
+            log.warn("No news found for date: {}", date);
+        }
+
+        log.info("News fetched from db.........");
+        return news;
     }
 
     public Optional<NewsDto> updateNewsInDb(String publishedAt, NewsDto updatedNewsDto) {
@@ -76,22 +85,22 @@ public class NewsRepositoryService {
             cache.put(publishedAt, newsMapper.toDto(savedEntity));
         }
 
-        System.out.println("News updated in db .........");
+        log.info("News updated in db .........");
         return of(newsMapper.toDto(savedEntity));
     }
 
     @Cacheable(value = "allNews")
     public List<NewsDto> getAllNewsFromDb() {
         List<NewsEntity> newsEntities = newsRepository.findAll();
-        System.out.println("Fetched all news from db.........");
+        log.info("Fetched all news from db.........");
         return newsEntities.stream()
                 .map(newsMapper::toDto)
                 .toList();
     }
 
-    @CacheEvict(value = "news", allEntries = true)
+    @CacheEvict(value = { "news", "allNews" }, allEntries = true)
     public void deleteAllFromDb() {
-        System.out.println("News deleted from db.........");
+        log.info("News deleted from db.........");
         newsRepository.deleteAll();
     }
 }
