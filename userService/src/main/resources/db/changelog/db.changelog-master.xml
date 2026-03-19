@@ -1,0 +1,15 @@
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+    <changeSet id="1" author="Arundhathy">
+        <tagDatabase tag="base-tag-01"/>
+    </changeSet>
+
+   <include file="userService/src/main/resources/db/changelog/user/create/create_table_user.xml"/>
+   <include file="userService/src/main/resources/db/changelog/user/alter/alter_table_user.xml"/>
+   <include file="userService/src/main/resources/db/changelog/user/insert/insert_table_user.xml"/>
+    <include file="userService/src/main/resources/db/changelog/user/update/update_table_user.xml"/>
+</databaseChangeLog>
