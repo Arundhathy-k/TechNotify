@@ -73,6 +73,14 @@
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
         <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>sqs</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>sns</artifactId>
+        </dependency>
+        <dependency>
             <groupId>io.awspring.cloud</groupId>
             <artifactId>spring-cloud-aws-starter</artifactId>
             <version>3.2.1</version>
@@ -82,7 +90,6 @@
             <artifactId>spring-cloud-aws-starter-sqs</artifactId>
             <version>3.2.1</version>
         </dependency>
-
     </dependencies>
     <properties>
         <maven.compiler.source>21</maven.compiler.source>
