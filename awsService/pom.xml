@@ -8,7 +8,6 @@
         <artifactId>TechNotify</artifactId>
         <version>0.0.1-SNAPSHOT</version>
     </parent>
-
     <artifactId>awsService</artifactId>
     <dependencies>
         <dependency>
@@ -80,6 +79,16 @@
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>sns</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.awspring.cloud</groupId>
+            <artifactId>spring-cloud-aws-starter</artifactId>
+            <version>3.2.1</version>
+        </dependency>
+        <dependency>
+            <groupId>io.awspring.cloud</groupId>
+            <artifactId>spring-cloud-aws-starter-sqs</artifactId>
+            <version>3.2.1</version>
         </dependency>
     </dependencies>
     <properties>
